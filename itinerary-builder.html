@@ -45,7 +45,7 @@ body{
   display:flex;flex-direction:column;
 }
 .sheet{min-height:11in}
-.page{height:11in;overflow:hidden}   /* height re-declared per paper size */
+.page{height:11in;overflow:hidden}
 @media screen{ .page+.page,.sheet+.sheet{margin-top:24px} }
 html.paginating .sheet{display:none}
 
@@ -127,11 +127,9 @@ footer{margin-top:12px;padding-top:7px;border-top:1px solid var(--rule);display:
 footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
 
 /* ══ PRINT PROFILE ═══════════════════════════
-   Every .page is exactly one sheet of paper, so
+   Every .page is exactly one sheet of US Letter, so
    printing is 1:1 with the preview — the paginator
-   has already decided where the breaks fall. The
-   paper size (@page size + .page height) is written
-   by extraCss() from the Paper size setting.
+   has already decided where the breaks fall.
 
    Print backgrounds ON is not required — every
    coloured element is either a border (always
@@ -239,7 +237,7 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
 .derived .row .vv{color:var(--ink2);font-family:var(--mono);font-size:11px}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{font-family:var(--mono);font-size:9.5px;background:var(--panel2);border:1px solid var(--rule);border-radius:20px;padding:2px 9px;color:var(--ink2)}
-.preview{overflow:auto;background:#DDE1E2;padding:22px}
+.preview{overflow:auto;background:#E7EAEB;padding:22px}
 .pv-head{display:flex;align-items:center;gap:10px;max-width:816px;margin:0 auto 14px}
 .pv-head .t{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .pv-head .sp{flex:1}
@@ -272,8 +270,8 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
     <div class="form" id="form"></div>
     <div class="preview">
       <div class="pv-head"><span class="t">Live preview · auto-generated</span><span class="sp"></span><span class="pv-warn" id="warnTag"></span><span class="pv-scale" id="pageTag"></span><span class="pv-scale" id="scaleTag"></span></div>
-      <div id="pvwrap"><iframe id="frame" title="preview"></iframe></div>
-      <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Paper size is set in <b>Document &amp; display</b>; for Legal, pick US Legal in your printer dialog too. Each traveler and the overview start a new page.</div>
+      <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no"></iframe></div>
+      <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is US Letter portrait. Each traveler and the overview start a new page.</div>
     </div>
   </div>
 </div>
@@ -321,7 +319,7 @@ function homeLine(dateIso,timeStr,off){const hm=curHome||{};if(hm.off===""||hm.o
 
 function SAMPLE(){return {
   eyebrow:"Travel Itinerary",titles:["Lisbon","Porto"],tripStart:"2026-09-18",tripEnd:"2026-09-27",
-  showCosts:true,dayGrouped:true,showSummaryPage:true,splitShared:true,paper:"letter",theme:"classic",
+  showCosts:true,dayGrouped:true,showSummaryPage:true,splitShared:true,theme:"classic",
   baseCurrency:"USD",rates:{HKD:"7.80",MOP:"8.03",EUR:"0.92",GBP:"0.79",JPY:"157",CNY:"7.2",CAD:"1.36",AUD:"1.52",SGD:"1.35",KRW:"1370",THB:"36"},
   people:[{name:"Alex Rivera",homeOff:"-360",homeLabel:"MDT"},{name:"Sam Chen",homeOff:"-420",homeLabel:"PDT"}],
   entities:[
@@ -366,7 +364,7 @@ function SAMPLE(){return {
   ],
   footer:["All times local","WEST = UTC+1","Rev. 1 · Draft"]
 };}
-function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,paper:"letter",theme:"classic",baseCurrency:"USD",rates:{},people:[{name:"",homeOff:"",homeLabel:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
+function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,theme:"classic",baseCurrency:"USD",rates:{},people:[{name:"",homeOff:"",homeLabel:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
 let state=SAMPLE();
 let curHome={};
 
@@ -392,7 +390,8 @@ function ents(){return state.entities||[];}
 function people(){return (state.people&&state.people.length)?state.people:[{name:""}];}
 function multi(){return people().length>1;}
 function palette(){return (THEMES[state.theme]||THEMES.classic).palette;}
-function paperDims(){return (state.paper==="legal")?{inch:14,wpt:612,hpt:1008,pxh:1344}:{inch:11,wpt:612,hpt:792,pxh:1056};}
+/* US Letter portrait, fixed: 8.5x11in = 612x792pt = 816x1056 css px. */
+const PAGE_WPT=612,PAGE_HPT=792,PAGE_PXH=1056;
 function isShared(e){return e.owner==null||e.owner==="shared";}
 function listFor(idx){return multi()?ents().filter(e=>{const o=(e.owner==null?"shared":String(e.owner));return o==="shared"||o===String(idx);}):ents();}
 function flightsIn(list){return list.filter(e=>e.type==="flight");}
@@ -498,9 +497,8 @@ function buildBody(s){const ppl=people(),mm=ppl.length>1;let sheets=[];if(mm&&s.
    exception — those split by row, since a 20-item list would
    otherwise strand most of a page.
 
-   __PAPER__ is substituted by extraCss()/wrapDoc() callers.    */
+   Output is always US Letter portrait.                        */
 const PAGINATOR=`(function(){
-var PAPER=__PAPER__;
 var D=document,root=D.documentElement,GUARD=400,OVERSIZE=0;
 
 function el(t,c){var e=D.createElement(t);if(c)e.className=c;return e;}
@@ -621,12 +619,20 @@ function paginate(){
   return pages.length;
 }
 
+/* Must be the real content height, not root.scrollHeight — that returns
+   max(content, viewport), so it would just echo back whatever height the
+   host already gave the iframe and the frame could never shrink. body is
+   height:auto with no margins, so its border box is exactly the content. */
+function contentHeight(){
+  var h=D.body.getBoundingClientRect().height;
+  return Math.ceil(h>0?h:root.scrollHeight);
+}
 function go(){
   var n=0;
   try{n=paginate();}
   catch(e){root.classList.remove("paginating");n=D.querySelectorAll(".sheet").length;}
   root.setAttribute("data-paginated","1");
-  try{parent.postMessage({itin:"paginated",pages:n,over:OVERSIZE,height:root.scrollHeight,paper:PAPER},"*");}catch(e){}
+  try{parent.postMessage({itin:"paginated",pages:n,over:OVERSIZE,height:contentHeight()},"*");}catch(e){}
 }
 var fired=false;
 function once(){if(fired)return;fired=true;requestAnimationFrame(go);}
@@ -636,12 +642,10 @@ if(D.fonts&&D.fonts.ready)D.fonts.ready.then(once,once);else once();
 
 function extraCss(){const th=THEMES[state.theme]||THEMES.classic;const varOv=Object.keys(th.vars).length?':root{'+Object.keys(th.vars).map(k=>k+":"+th.vars[k]).join(";")+'}':'';
   const dh='.dayhead{margin:6px 0 11px -26px;padding-bottom:5px;border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:9px}.dayhead .dn{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}.dayhead .dd{font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.01em}.leg+.dayhead{margin-top:14px}';
-  const pd=paperDims();
-  const page='@page{size:8.5in '+pd.inch+'in;margin:0}.sheet{min-height:'+pd.inch+'in}.page{height:'+pd.inch+'in}html[data-print] .page{box-shadow:none;margin:0}';
+  const page='html[data-print] .page{box-shadow:none;margin:0}';
   return '<style>'+varOv+dh+page+'</style>';}
 function wrapDoc(bodyHtml,titleText){const css=document.getElementById("itin-css").textContent;
-  const pg=PAGINATOR.replace("__PAPER__",JSON.stringify(state.paper==="legal"?"legal":"letter"));
-  return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>'+pg+'<\/script>\n</body>\n</html>';}
+  return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>'+PAGINATOR+'<\/script>\n</body>\n</html>';}
 function docTitle(){const t=(state.titles||[]).filter(x=>x&&x.trim()).join(" & ");return t+(dateRangeStr()?" — "+dateRangeStr():"");}
 function buildDoc(s){return wrapDoc(buildBody(s),docTitle());}
 function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{off:ppl[idx].homeOff,label:ppl[idx].homeLabel}),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
@@ -651,8 +655,21 @@ const frame=document.getElementById("frame"),pvwrap=document.getElementById("pvw
       scaleTag=document.getElementById("scaleTag"),pageTag=document.getElementById("pageTag"),
       warnTag=document.getElementById("warnTag");
 let pvTimer=null,lastH=1056;
-function applyScale(){const w=pvwrap.clientWidth,sc=Math.min(1,w/816);frame.style.transform="scale("+sc+")";frame.style.height=lastH+"px";pvwrap.style.height=(lastH*sc)+"px";scaleTag.textContent=Math.round(sc*100)+"%";}
-function measureFrame(){try{const d=frame.contentDocument;if(d&&d.documentElement)lastH=d.documentElement.scrollHeight||lastH;}catch(e){}applyScale();}
+/* The iframe is always given more height than the document needs, so the
+   preview never grows its own scrollbar — the outer .preview pane does all
+   the scrolling. The slack shows the document's own page background, which
+   .preview matches, so the seam is invisible. */
+const FRAME_SLACK=48;
+function applyScale(){
+  const w=pvwrap.clientWidth,sc=Math.min(1,w/816),h=lastH+FRAME_SLACK;
+  frame.style.transform="scale("+sc+")";
+  frame.style.height=h+"px";
+  pvwrap.style.height=(h*sc)+"px";
+  scaleTag.textContent=Math.round(sc*100)+"%";
+}
+/* Pre-pagination estimate only; the paginator's report supersedes it.
+   Measures body, not documentElement, for the same reason contentHeight() does. */
+function measureFrame(){try{const b=frame.contentDocument&&frame.contentDocument.body;if(b)lastH=Math.ceil(b.getBoundingClientRect().height)||lastH;}catch(e){}applyScale();}
 
 /* The document paginates itself and reports back; every consumer
    (preview, print, PDF) waits for that before measuring or capturing. */
@@ -772,7 +789,6 @@ function renderForm(){
   h+=chk("showCosts",s.showCosts,"Show cost section");
   h+=chk("dayGrouped",s.dayGrouped,"Group journey into day headers");
   h+=chk("showSummaryPage",s.showSummaryPage,"Add an overview page (multi-traveler)");
-  h+='<div class="grid">'+fld("Paper size",sel("paper",s.paper||"letter",[["letter","US Letter \u00b7 8.5\u00d711"],["legal","US Legal \u00b7 8.5\u00d714"]]))+'<div></div></div>';
   h+='<div class="sub-h">Money</div>';
   h+='<div class="grid">'+fld("Base currency",sel("baseCurrency",s.baseCurrency||"USD",CURRENCIES))+'<div></div></div>';
   h+=chk("splitShared",s.splitShared,"Split shared costs across travelers");
@@ -788,12 +804,9 @@ function renderForm(){
 
   form.innerHTML=h;
   const ts=document.getElementById("themeSel");if(ts)ts.value=state.theme||"classic";
-  syncPaperUI();
 }
 function updateSummary(){const d=form.querySelector(".derived");if(d)d.innerHTML=summaryHTML();}
 function updateRates(){const b=document.getElementById("ratesBox");if(b)b.innerHTML=ratesEditor();}
-/* The print profile follows the Paper size setting, so name it on the button. */
-function syncPaperUI(){const b=document.getElementById("btnPrint");if(b)b.textContent="Print · "+(state.paper==="legal"?"Legal":"Letter");}
 
 /* ===== events ===== */
 form.addEventListener("input",e=>{
@@ -802,7 +815,6 @@ form.addEventListener("input",e=>{
   // Which currencies need a rate depends on the base and on each item's
   // currency, so that editor has to be rebuilt when either changes.
   if(path==="baseCurrency"||path.endsWith(".currency"))updateRates();
-  if(path==="paper")syncPaperUI();
   updateSummary();schedulePreview();
 });
 
@@ -923,16 +935,16 @@ async function exportPDF(html){
     iframe.style.height=Math.max(1200,doc.documentElement.scrollHeight)+"px";
     await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r);});});
     var jsPDF=window.jspdf.jsPDF;
-    var pd=paperDims(),SCALE=2,pdf=null;
+    var SCALE=2,pdf=null;
     for(var i=0;i<pages.length;i++){
       var opts={scale:SCALE,backgroundColor:"#ffffff",useCORS:true,logging:false,windowWidth:816,width:816};
-      if(exact)opts.height=pd.pxh;
+      if(exact)opts.height=PAGE_PXH;
       var canvas=await window.html2canvas(pages[i],opts);
       var img=canvas.toDataURL("image/jpeg",0.92);
-      var hpt=exact?pd.hpt:Math.min(pd.hpt,(canvas.height/SCALE)*0.75);  // css px -> pt (72/96)
-      if(!pdf)pdf=new jsPDF({unit:"pt",format:[pd.wpt,pd.hpt],orientation:"portrait"});
-      else pdf.addPage([pd.wpt,pd.hpt]);
-      pdf.addImage(img,"JPEG",0,0,pd.wpt,hpt);
+      var hpt=exact?PAGE_HPT:Math.min(PAGE_HPT,(canvas.height/SCALE)*0.75);  // css px -> pt (72/96)
+      if(!pdf)pdf=new jsPDF({unit:"pt",format:[PAGE_WPT,PAGE_HPT],orientation:"portrait"});
+      else pdf.addPage([PAGE_WPT,PAGE_HPT]);
+      pdf.addImage(img,"JPEG",0,0,PAGE_WPT,hpt);
     }
     var url=URL.createObjectURL(pdf.output("blob"));
     var w=window.open(url,"_blank");
