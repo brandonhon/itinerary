@@ -1,18 +1,21 @@
 # Itinerary Builder
 
-A single-file travel itinerary builder that produces a typeset, print-ready
-document. Open `itinerary-builder.html` in a browser — there is no build step,
-no server, and no install.
+A static, dependency-free travel itinerary builder that produces a typeset,
+print-ready document. It's plain HTML, CSS, and JavaScript — no build step, no
+server, no install. Open `index.html` in a browser, or host the folder on any
+static host such as GitHub Pages.
 
 Fill in the form on the left; the right side is a live preview of the actual
 printed pages. Every page in that preview is a real sheet of US Letter, so what
 you see is what comes out of the printer or the PDF.
 
+**Live:** https://brandonhon.github.io/itinerary/
+
 ---
 
 ## Getting started
 
-1. Open `itinerary-builder.html` in any modern browser.
+1. Open `index.html` in any modern browser (or visit the live link above).
 2. Click **Load sample** to see a filled-in ten-day, two-traveler trip.
 3. Click **New / blank** to start your own.
 
@@ -122,11 +125,22 @@ Two things load from a CDN, both optional:
   Without a network connection, Export PDF falls back to the print dialog.
   **Print** never needs the network.
 
-## Layout of the file
+## Project layout
 
-Everything is in `itinerary-builder.html`:
+```
+index.html      markup shell + the print stylesheet held as inert text
+css/app.css     styles for the builder UI (form + preview chrome)
+js/app.js       state, form rendering, pagination, and print/PDF/share plumbing
+```
 
-- `#itin-css` — the print stylesheet, held as inert text and injected into the
-  generated document
-- `PAGINATOR` — the pagination script that runs *inside* the generated document
-- builder UI styles, state, form rendering, and the print/PDF/share plumbing
+- `index.html` also carries `#itin-css`, a `<script type="text/plain">` block
+  holding the generated document's stylesheet. It's kept inline (not a linked
+  `.css`) because `js/app.js` reads it as text and injects it into each
+  generated document — this keeps it working identically from `file://` and
+  over HTTP with no extra fetch.
+- Inside `js/app.js`, `PAGINATOR` is the pagination script that is serialized
+  into, and runs *inside*, each generated document. Preview, print, and PDF all
+  consume the same paginated result.
+
+Paths are relative, so the folder can be served from any subdirectory (as
+GitHub Pages does) without configuration.

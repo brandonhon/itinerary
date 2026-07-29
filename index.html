@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<title>Itinerary Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="text/plain" id="itin-css">:root{
+  --ink:#10181F;
+  --ink-2:#2C3843;
+  --muted:#68737E;
+  --faint:#98A2AB;
+  --rule:#DCE1E3;
+  --page:#FFFFFF;
+  --sans:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:#E7EAEB;
+  font-family:var(--sans);
+  color:var(--ink);
+  font-size:13px;
+  line-height:1.45;
+  padding:24px 16px;
+}
+
+/* ── page box ─────────────────────────────────
+   .sheet is the un-paginated source the builder
+   emits (and the fallback if the paginator never
+   runs); .page is one physical sheet of paper,
+   produced by the paginator. Both share the same
+   frame so the fallback still looks right.      */
+.sheet,.page{
+  width:8.5in;
+  margin:0 auto;
+  background:var(--page);
+  padding:0.44in 0.5in 0.4in;
+  box-shadow:0 2px 24px rgba(16,24,31,.14);
+  display:flex;flex-direction:column;
+}
+.sheet{min-height:11in}
+.page{height:11in;overflow:hidden}
+@media screen{ .page+.page,.sheet+.sheet{margin-top:24px} }
+html.paginating .sheet{display:none}
+
+/* ── masthead ─────────────────────────────── */
+.mast{border-bottom:2.5px solid var(--ink);padding-bottom:9px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-shrink:0}
+.eyebrow{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+h1{font-family:var(--cond);font-weight:700;font-size:33px;line-height:.98;letter-spacing:-.008em;text-transform:uppercase;white-space:normal;max-width:5.4in;overflow-wrap:break-word}
+h1 .sep{color:var(--faint);font-weight:600;padding:0 .12em}
+.mast-r{text-align:right;flex-shrink:0}
+.daterange{font-family:var(--cond);font-weight:700;font-size:16px;letter-spacing:.01em;white-space:nowrap}
+.mast-meta{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;color:var(--muted);text-transform:uppercase;margin-top:3px}
+
+/* ── running head (continuation pages) ────── */
+.runhead{border-bottom:1.5px solid var(--ink);padding-bottom:7px;display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-shrink:0}
+.runhead .rt{font-family:var(--cond);font-weight:700;font-size:15px;line-height:1;letter-spacing:-.005em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runhead .rm{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap;flex-shrink:0}
+
+/* ── stat strip ───────────────────────────── */
+.stats{display:flex;border-bottom:1px solid var(--rule);flex-shrink:0}
+.stat{flex:1;padding:8px 12px 9px;border-right:1px solid var(--rule)}
+.stat:first-child{padding-left:0}
+.stat:last-child{border-right:0;padding-right:0}
+.stat b{display:block;font-family:var(--cond);font-weight:700;font-size:17px;line-height:1.1}
+.stat span{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ── body columns ─────────────────────────────
+   The paginator locks main/.rail to an explicit
+   pixel height per page, then greedily fills each
+   column until scrollHeight exceeds it. Both need
+   overflow:hidden for that measurement to work. */
+.cols{display:flex;gap:22px;padding-top:12px;flex:1;min-height:0}
+.cols>main{flex:1;min-width:0;overflow:hidden}
+.rail{width:2.32in;flex-shrink:0;border-left:1px solid var(--rule);padding-left:20px;overflow:hidden}
+
+h2{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);padding-bottom:5px;margin-bottom:9px;border-bottom:1px solid var(--ink)}
+h2:not(:first-child){margin-top:16px}
+
+/* ── journey spine (signature) ────────────── */
+.spine{position:relative;padding-left:26px}
+.leg{position:relative;padding-bottom:11px}
+.leg::before{content:"";position:absolute;left:-20px;top:5px;bottom:-6px;width:0;border-left:2px solid var(--seg,var(--rule))}
+.leg:last-child::before{display:none}
+.leg::after{content:"";position:absolute;left:-24px;top:3.5px;width:10px;height:10px;border-radius:50%;background:var(--page);border:2.5px solid var(--seg,var(--faint))}
+.leg.node-fill::after{background:var(--seg);border-width:5px}
+
+.leg-head{display:flex;align-items:baseline;gap:9px}
+.stamp{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.07em;color:var(--seg,var(--muted));text-transform:uppercase;flex-shrink:0;width:60px}
+.title{font-family:var(--cond);font-weight:700;font-size:14.5px;letter-spacing:.005em;line-height:1.2}
+.title small{font-family:var(--mono);font-weight:500;font-size:9px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;padding-left:5px}
+.detail{padding-left:69px;margin-top:2px}
+.detail p{font-size:11px;color:var(--ink-2);line-height:1.42}
+.detail p + p{margin-top:2.5px}
+.detail .k{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:inline-block;min-width:52px}
+.mono{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.01em}
+.pref{display:inline-block;font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--page);background:var(--seg);padding:1.5px 5px;border-radius:2px;vertical-align:1.5px;margin-right:5px}
+.alt{color:var(--muted) !important}
+
+/* ── rail blocks ──────────────────────────── */
+.rec{border-bottom:1px solid var(--rule);padding-bottom:7px;margin-bottom:7px}
+.rec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.rec-t{font-family:var(--cond);font-weight:700;font-size:12.5px;line-height:1.25}
+.rec-s{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:2px}
+.rec-v{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.03em;word-break:break-all}
+.rec-c{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:1px}
+
+.cost{width:100%;border-collapse:collapse}
+.cost td{padding:3.5px 0;font-size:11px;vertical-align:baseline}
+.cost td:last-child{text-align:right;font-family:var(--mono);font-size:10.5px;font-weight:500;white-space:nowrap}
+.cost tr.tot td{border-top:1.5px solid var(--ink);padding-top:6px;font-weight:600;font-size:12px}
+.cost tr.tot td:last-child{font-size:13px;font-weight:600}
+.cost .sub{display:block;font-family:var(--mono);font-size:8.5px;color:var(--faint);letter-spacing:.04em}
+
+.chk{list-style:none}
+.chk li{position:relative;padding-left:15px;font-size:10.5px;line-height:1.4;color:var(--ink-2);margin-bottom:6px}
+.chk li::before{content:"";position:absolute;left:0;top:3.5px;width:7px;height:7px;border:1.5px solid var(--faint);border-radius:1px}
+.chk b{font-weight:600;color:var(--ink)}
+
+footer{margin-top:12px;padding-top:7px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);flex-shrink:0}
+footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
+
+/* ══ PRINT PROFILE ═══════════════════════════
+   Every .page is exactly one sheet of US Letter, so
+   printing is 1:1 with the preview — the paginator
+   has already decided where the breaks fall.
+
+   Print backgrounds ON is not required — every
+   coloured element is either a border (always
+   printed) or force-flagged with print-color-adjust. */
+
+@page{ size:8.5in 11in; margin:0; }
+
+@media print{
+  *,*::before,*::after{
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+  }
+
+  html,body{
+    background:#fff !important;
+    margin:0 !important;
+    padding:0 !important;
+    width:8.5in;
+    font-size:13px;          /* pin the root scale  */
+  }
+
+  .sheet,.page{
+    margin:0;
+    box-shadow:none;
+    border:0;
+    max-width:none;
+  }
+
+  /* No break-after here on purpose: a .page is exactly as tall as the
+     paper, so the pages already tile 1:1. Adding a forced break would
+     emit a blank sheet between every pair. */
+
+  /* Fallback path only (paginator did not run):
+     keep logical blocks intact and split travelers. */
+  .sheet+.sheet{ break-before:page; page-break-before:always; }
+  .sheet .leg,.sheet .rec,.sheet .chk li,.sheet .cost tr,.sheet .dayhead{
+    break-inside:avoid; page-break-inside:avoid;
+  }
+  .sheet h2{ break-after:avoid; page-break-after:avoid; }
+  p,li{ orphans:3; widows:3; }
+}
+</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="brand">Itinerary <span>/</span> Builder</div>
+    <div class="sp"></div>
+    <label class="barsel"><span>Theme</span><select id="themeSel"><option value="classic">Classic</option><option value="warm">Warm</option><option value="mono">Monochrome</option><option value="slate">Slate</option><option value="forest">Forest</option><option value="berry">Berry</option></select></label>
+    <button class="btn" id="btnSample">Load sample</button>
+    <button class="btn" id="btnBlank">New / blank</button>
+    <button class="btn" id="btnLink">Copy link</button>
+    <button class="btn" id="btnSave">Save data</button>
+    <label class="btn" for="fileLoad">Load data</label>
+    <input type="file" id="fileLoad" accept="application/json,.json">
+    <button class="btn" id="btnPrint">Print</button>
+    <button class="btn pri" id="btnPdf">Export PDF</button>
+  </div>
+  <div class="wrap">
+    <div class="form" id="form"></div>
+    <div class="preview">
+      <div class="pv-head"><span class="t">Live preview · auto-generated</span><span class="sp"></span><span class="pv-warn" id="warnTag"></span><span class="pv-scale" id="pageTag"></span><span class="pv-scale" id="scaleTag"></span></div>
+      <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no"></iframe></div>
+      <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is US Letter portrait. Each traveler and the overview start a new page.</div>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
