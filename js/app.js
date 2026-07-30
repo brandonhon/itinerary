@@ -54,6 +54,17 @@ function tzParts(tz,date,extra){
   return p;
 }
 function partsOffMin(p,ms){return Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-ms)/60000);}
+/* ICU only has a real abbreviation for about a quarter of zones and returns
+   "GMT+8" for the rest. Leaving the field blank there was reported as the
+   timezone "not filling" for TFU and LIS, so fall back to a compact offset:
+   "UTC+1" beats nothing next to a time on the printed page. Deriving initials
+   from the long name is tempting and wrong — "Central European Standard Time"
+   would give CEST when the real abbreviation is CET. */
+function shortZoneLabel(min){
+  if(min==null)return "";
+  const s=min<0?"−":"+",a=Math.abs(min),h=Math.floor(a/60),m=a%60;
+  return "UTC"+s+h+(m?":"+String(m).padStart(2,"0"):"");
+}
 function offLabel(min){if(min==null)return "";const s=min<0?"−":"+";const a=Math.abs(min);return "UTC"+s+String(Math.floor(a/60)).padStart(2,"0")+":"+String(a%60).padStart(2,"0");}
 /* Several formatters per zone, so build the list once and keep it. */
 let TZOPTS=null;
@@ -121,6 +132,20 @@ function epUTC(iso,tm,off){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y
 function elapsedStr(f){const a=epUTC(f.departDate,f.departTime,f.departOff),b=epUTC(f.arriveDate,f.arriveTime,f.arriveOff);if(a==null||b==null)return "";let mins=Math.round((b-a)/60000);if(mins<0)return "";const approx=(f.departOff===""||f.arriveOff===""||f.departOff==null||f.arriveOff==null);const h=Math.floor(mins/60),mm=mins%60;return (approx?"~":"")+h+"h "+String(mm).padStart(2,"0")+"m";}
 function num(x){const n=parseFloat(String(x==null?"":x).replace(/[, ]/g,""));return isNaN(n)?0:n;}
 function money(cur,n){const s=own(SYM,cur)?SYM[cur]:(cur?cur+" ":"");const dec=(cur==="JPY"||cur==="KRW")?0:2;return s+Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});}
+/* Connections were one free-text field ("EWR · 1h 40m") and are now a list.
+   Older drafts and share links still carry the string, so read through this
+   rather than touching e.connections directly. The string becomes a single
+   entry, which renders identically to how it always did. */
+function connList(e){
+  const c=e&&e.connections;
+  if(Array.isArray(c))return c.filter(x=>x&&typeof x==="object");
+  const t=String(c||"").trim();
+  return t?[{place:t,wait:""}]:[];
+}
+function connText(e){
+  return connList(e).map(c=>[String(c.place||"").trim(),String(c.wait||"").trim()]
+    .filter(Boolean).join(" · ")).filter(Boolean).join(" → ");
+}
 function arrowize(s){return String(s||"").split(/\s*(?:,|→|->)\s*/).map(x=>x.trim()).filter(Boolean).join(" → ");}
 /* hm.tz is a zone name; hm.off is the older numeric offset, still honoured so
    share links and drafts built before the switch keep rendering. */
@@ -158,8 +183,8 @@ function SAMPLE(){return {
   baseCurrency:"USD",rates:{HKD:"7.80",MOP:"8.03",EUR:"0.92",GBP:"0.79",JPY:"157",CNY:"7.2",CAD:"1.36",AUD:"1.52",SGD:"1.35",KRW:"1370",THB:"36"},
   people:[{name:"Alex Rivera",homeTz:"America/Denver"},{name:"Sam Chen",homeTz:"America/Los_Angeles"}],
   entities:[
-    {type:"flight",owner:"0",carrier:"United",flightNos:"UA0918, UA1450",originCode:"DEN",originName:"Denver",departDate:"2026-09-18",departTime:"16:20",departOff:"-360",departZone:"MDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"11:05",arriveOff:"60",arriveZone:"WEST",connections:"EWR · 1h 40m",link:"",conf:"UA7Q2LM",cost:"1180.44",currency:"USD",note:"Overnight transatlantic."},
-    {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0244, DL0118",originCode:"SEA",originName:"Seattle",departDate:"2026-09-18",departTime:"13:10",departOff:"-420",departZone:"PDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"12:50",arriveOff:"60",arriveZone:"WEST",connections:"JFK · 2h 05m",link:"",conf:"DLK83RP",cost:"1342.90",currency:"USD",note:""},
+    {type:"flight",owner:"0",carrier:"United",flightNos:"UA0918, UA1450",originCode:"DEN",originName:"Denver",departDate:"2026-09-18",departTime:"16:20",departOff:"-360",departZone:"MDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"11:05",arriveOff:"60",arriveZone:"WEST",connections:[{place:"EWR",wait:"1h 40m"}],link:"",conf:"UA7Q2LM",cost:"1180.44",currency:"USD",note:"Overnight transatlantic."},
+    {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0244, DL0118",originCode:"SEA",originName:"Seattle",departDate:"2026-09-18",departTime:"13:10",departOff:"-420",departZone:"PDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"12:50",arriveOff:"60",arriveZone:"WEST",connections:[{place:"JFK",wait:"2h 05m"}],link:"",conf:"DLK83RP",cost:"1342.90",currency:"USD",note:""},
     {type:"hotel",owner:"shared",name:"Hotel Baixa Terrace",area:"Baixa",address:"Rua Áurea 121, Lisbon. Steps from Praça do Comércio; Baixa-Chiado Metro two blocks north.",checkIn:"2026-09-19",checkOut:"2026-09-24",link:"https://maps.google.com/?q=Rua+Aurea+121+Lisbon",conf:"BTL-99120",cost:"940.00",currency:"EUR",note:""},
     {type:"activity",owner:"shared",name:"Tram 28 & Alfama walk",place:"Martim Moniz stop",date:"2026-09-20",time:"10:00",link:"",conf:"",cost:"",currency:"EUR",note:"Board early to beat the queue; ride to Alfama, then wander down to the cathedral."},
     {type:"meal",owner:"shared",name:"Dinner at Cervejaria Ramiro",venue:"Intendente",date:"2026-09-21",time:"20:00",link:"",conf:"",cost:"",currency:"EUR",note:"Seafood; expect a wait. Garlic prawns, then a steak sandwich to finish."},
@@ -180,8 +205,8 @@ function SAMPLE(){return {
     {type:"entertainment",owner:"shared",name:"Sunset at Miradouro da Graça",venue:"Graça",date:"2026-09-23",time:"19:00",link:"",conf:"",cost:"",currency:"EUR",note:"Bring a drink; arrive 30 minutes before sundown for a spot."},
     {type:"activity",owner:"shared",name:"Livraria Lello",place:"Porto centre",date:"2026-09-25",time:"10:30",link:"",conf:"",cost:"",currency:"EUR",note:"Buy the timed ticket ahead; the voucher counts toward a book."},
     {type:"meal",owner:"shared",name:"Francesinha at Café Santiago",venue:"Porto centre",date:"2026-09-25",time:"19:30",link:"",conf:"",cost:"",currency:"EUR",note:"The city's signature sandwich; come hungry."},
-    {type:"flight",owner:"0",carrier:"United",flightNos:"UA1802, UA0961",originCode:"OPO",originName:"Porto",departDate:"2026-09-27",departTime:"13:40",departOff:"60",departZone:"WEST",destCode:"DEN",destName:"Denver",arriveDate:"2026-09-27",arriveTime:"21:30",arriveOff:"-360",arriveZone:"MDT",connections:"IAD · 1h 15m",link:"",conf:"",cost:"",currency:"USD",note:""},
-    {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0119, DL0245",originCode:"OPO",originName:"Porto",departDate:"2026-09-27",departTime:"15:10",departOff:"60",departZone:"WEST",destCode:"SEA",destName:"Seattle",arriveDate:"2026-09-27",arriveTime:"23:55",arriveOff:"-420",arriveZone:"PDT",connections:"JFK · 1h 55m",link:"",conf:"",cost:"",currency:"USD",note:""}
+    {type:"flight",owner:"0",carrier:"United",flightNos:"UA1802, UA0961",originCode:"OPO",originName:"Porto",departDate:"2026-09-27",departTime:"13:40",departOff:"60",departZone:"WEST",destCode:"DEN",destName:"Denver",arriveDate:"2026-09-27",arriveTime:"21:30",arriveOff:"-360",arriveZone:"MDT",connections:[{place:"IAD",wait:"1h 15m"}],link:"",conf:"",cost:"",currency:"USD",note:""},
+    {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0119, DL0245",originCode:"OPO",originName:"Porto",departDate:"2026-09-27",departTime:"15:10",departOff:"60",departZone:"WEST",destCode:"SEA",destName:"Seattle",arriveDate:"2026-09-27",arriveTime:"23:55",arriveOff:"-420",arriveZone:"PDT",connections:[{place:"JFK",wait:"1h 55m"}],link:"",conf:"",cost:"",currency:"USD",note:""}
   ],
   checklistHeading:"Before departure",
   checklist:[
@@ -262,7 +287,7 @@ function nodesFor(e,id){
   if(e.type==="flight"){
     const dep={id:id+"d",when:toEpoch(e.departDate,e.departTime),stamp:fmtStamp(e.departDate),title:"Depart "+(e.originName||e.originCode||"—"),titleSmall:tsmall(e.originCode,e.departTime,e.departZone),nodeFill:true,lines:[],link:e.link,meta:{ff:e,end:"dep"}};
     if(e.carrier||e.flightNos)dep.lines.push(L("key",e.carrier||"Flight",arrowize(e.flightNos),true,false));
-    if(e.connections)dep.lines.push(L("key","Via",e.connections,false,false));
+    {const via=connText(e);if(via)dep.lines.push(L("key","Via",via,false,false));}
     if(e.note)dep.lines.push(L("key","Note",e.note,false,false));
     {const hl=homeLine(e.departDate,e.departTime,e.departOff);if(hl)dep.lines.push(L("key","Home",hl,false,true));}
     const arr={id:id+"a",when:toEpoch(e.arriveDate,e.arriveTime),stamp:fmtStamp(e.arriveDate),title:"Arrive "+(e.destName||e.destCode||"—"),titleSmall:tsmall(e.destCode,e.arriveTime,e.arriveZone),nodeFill:true,lines:[],meta:{ff:e,end:"arr"}};
@@ -293,7 +318,31 @@ function renderSpine(nodes,grouped){if(!grouped)return nodes.map(renderNode).joi
 
 function mastTitles(s){const titles=(s.titles||[]).map(t=>String(t||"").trim()).filter(Boolean);return {fs:titleFont(titles.join("").length),html:titles.map(esc).join('<span class="sep">/</span>'),plain:titles.join(" / ")};}
 function statStrip(stats){return stats.length?'<div class="stats">'+stats.map(x=>'<div class="stat"><b>'+esc(x.v)+'</b><span>'+esc(x.l)+'</span></div>').join("")+'</div>':"";}
-function railChecklist(s){if(!(s.checklist||[]).length)return "";const items=s.checklist.map(it=>{const tb=it.title?'<b>'+inl(it.title)+'</b> ':"";return '<li>'+tb+inl(it.body)+'</li>';}).join("\n        ");return '<h2>'+esc(s.checklistHeading||"Before departure")+'</h2>\n      <ul class="chk">\n        '+items+'\n      </ul>\n\n      ';}
+/* One flat list where an entry is either {heading} or {title,body}: order does
+   the grouping, so reordering is a single array move and nothing needs
+   migrating. Items before the first heading entry belong to checklistHeading,
+   which is what every existing draft and share link contains. */
+function checklistSections(s){
+  const out=[];let cur=null;
+  (s.checklist||[]).forEach(it=>{
+    if(!it||typeof it!=="object")return;
+    if(typeof it.heading==="string"){cur={heading:it.heading,items:[]};out.push(cur);return;}
+    if(!cur){cur={heading:s.checklistHeading||"Before departure",items:[]};out.push(cur);}
+    cur.items.push(it);
+  });
+  return out.filter(sec=>sec.items.length);          /* an empty section prints nothing */
+}
+function railChecklist(s){
+  const secs=checklistSections(s);
+  if(!secs.length)return "";
+  return secs.map(sec=>{
+    const items=sec.items.map(it=>{
+      const tb=it.title?'<b>'+inl(it.title)+'</b> ':"";
+      return '<li>'+tb+inl(it.body)+'</li>';
+    }).join("\n        ");
+    return '<h2>'+esc(sec.heading||"Checklist")+'</h2>\n      <ul class="chk">\n        '+items+'\n      </ul>';
+  }).join("\n\n      ")+'\n\n      ';
+}
 function railReference(s){const ref=(s.emergency||[]).filter(x=>x&&(x.label||x.value));if(!ref.length)return "";return '<h2>Reference</h2>\n      '+ref.map(x=>'<div class="rec"><div class="rec-s">'+esc(x.label)+'</div><div class="rec-t">'+esc(x.value)+'</div></div>').join("\n      ")+'\n\n      ';}
 function costTable(cd,heading){if(!cd.any&&!(cd.tot&&cd.tot.length))return "";let t='<h2>'+esc(heading)+'</h2>\n      <table class="cost">\n        ';if(cd.rows)t+=cd.rows.map(r=>'<tr><td>'+esc(r.label)+'<span class="sub">'+esc(r.cur)+'</span></td><td>'+esc(r.amount)+'</td></tr>').join("\n        ");
   if(cd.tot.length===1&&cd.tot[0].cur===cd.base){t+='\n        <tr class="tot"><td>Total · '+esc(cd.base)+'</td><td>'+esc(cd.tot[0].amount)+'</td></tr>';}
@@ -637,23 +686,35 @@ function ibtn(act,i,sym,cls,dis){
 function ownerOpts(){return [["shared","Both / all travelers"]].concat(people().map((p,idx)=>[String(idx),p.name||("Traveler "+(idx+1))]));}
 
 function tail(e,i){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
+function connRows(e,i){
+  let h='<div class="sub-h">Connections / layovers</div>';
+  connList(e).forEach((c,j)=>{
+    const cp="entities."+i+".connections."+j;
+    h+='<div class="grid conn">'+fld("Airport or place",inp(cp+".place",c.place,"EWR"))+
+      fld("Layover",inp(cp+".wait",c.wait,"1h 40m"))+
+      '<button class="ic del" data-act="conn-del" data-i="'+i+'" data-j="'+j+'" aria-label="'+
+      esc("Delete connection "+(j+1))+'">✕</button></div>';
+  });
+  h+='<div class="addrow"><button class="add" data-act="conn-add" data-i="'+i+'">+ Connection</button></div>';
+  return h;
+}
 function entityCard(e,i){
   const p="entities."+i,tm=own(TYPES,e.type)?TYPES[e.type]:{label:e.type,c:"#666"};
   let h='<div class="card" style="border-left-color:'+tm.c+'"><div class="card-h"><span class="tag" style="background:'+tm.c+'">'+esc(tm.label)+'</span><span class="sp"></span>'+ibtn("ent-del",i,"✕","del")+'</div>';
   if(multi())h+=fld("Traveler",sel(p+".owner",e.owner||"shared",ownerOpts()),true);
   if(e.type==="flight"){
-    h+='<div class="sub-h">Departure</div><div class="grid three">'+fld("From code",inp(p+".originCode",e.originCode,"DEN"))+fld("From city",inp(p+".originName",e.originName,"Denver"))+fld("Zone label",inp(p+".departZone",e.departZone,"MDT"))+'</div>';
+    h+='<div class="sub-h">Departure</div><div class="grid three">'+fld("From code",inp(p+".originCode",e.originCode,"DEN"))+fld("From city",inp(p+".originName",e.originName,"Denver"))+fld("Timezone",inp(p+".departZone",e.departZone,"MDT"))+'</div>';
     h+='<div class="grid three">'+fld("Depart date",dateF(p+".departDate",e.departDate))+fld("Depart time",timeF(p+".departTime",e.departTime))+fld("UTC offset",sel(p+".departOff",e.departOff,offsetOpts()))+'</div>';
-    h+='<div class="sub-h">Arrival</div><div class="grid three">'+fld("To code",inp(p+".destCode",e.destCode,"LIS"))+fld("To city",inp(p+".destName",e.destName,"Lisbon"))+fld("Zone label",inp(p+".arriveZone",e.arriveZone,"WEST"))+'</div>';
+    h+='<div class="sub-h">Arrival</div><div class="grid three">'+fld("To code",inp(p+".destCode",e.destCode,"LIS"))+fld("To city",inp(p+".destName",e.destName,"Lisbon"))+fld("Timezone",inp(p+".arriveZone",e.arriveZone,"WEST"))+'</div>';
     h+='<div class="grid three">'+fld("Arrive date",dateF(p+".arriveDate",e.arriveDate))+fld("Arrive time",timeF(p+".arriveTime",e.arriveTime))+fld("UTC offset",sel(p+".arriveOff",e.arriveOff,offsetOpts()))+'</div>';
     h+='<div class="grid">'+fld("Carrier",inp(p+".carrier",e.carrier,"United"))+fld("Flight numbers",inp(p+".flightNos",e.flightNos,"UA0918, UA1450",true))+'</div>';
-    h+=fld("Connections / layover",inp(p+".connections",e.connections,"EWR · 1h 40m"),true);
+    h+=connRows(e,i);
     /* Without both offsets the elapsed time is only a guess and the home-time
        line cannot be worked out at all — but both failures are silent, so say
        so on the card rather than letting the output quietly degrade. */
     if((e.departTime||e.arriveTime)&&(!e.departOff||!e.arriveOff))
       h+='<div class="hint warn">⚠ Set both UTC offsets. Without them the elapsed time is approximate (shown with ~) and the home-time line is left out entirely.</div>';
-    h+='<div class="hint">Flight numbers: comma-separated, displayed with arrows. Set both UTC offsets for an exact elapsed time; the zone label is just for display.</div>';
+    h+='<div class="hint">Flight numbers: comma-separated, displayed with arrows. Set both UTC offsets for an exact elapsed time; the timezone is the label shown on the page, like MDT.</div>';
     h+=tail(e,i);
   } else if(e.type==="hotel"){
     h+=fld("Name",inp(p+".name",e.name,"Hotel name"),true)+'<div class="grid">'+fld("Check-in",dateF(p+".checkIn",e.checkIn))+fld("Check-out",dateF(p+".checkOut",e.checkOut))+'</div>'+fld("Area",inp(p+".area",e.area,"District"),true)+fld("Address / detail",area(p+".address",e.address,"Street, district…"),true)+tail(e,i);
@@ -715,9 +776,25 @@ function renderForm(){
   h+='<div class="addrow"><button class="add" data-act="ref-add">+ Reference</button></div><div class="hint">Emergency numbers, consulate, insurance policy, ICE contact.</div></div></div>';
 
   h+='<div class="sec"><h2>Checklist <span class="ct">'+(s.checklist||[]).length+'</span></h2><div class="sbody">';
-  h+=fld("Section heading",inp("checklistHeading",s.checklistHeading,"Before departure"),true);
-  (s.checklist||[]).forEach((it,i)=>{h+='<div class="card"><div class="card-h"><span class="tag" style="background:var(--muted)">Item '+(i+1)+'</span><span class="sp"></span>'+ibtn("chk-up",i,"↑",null,i===0)+ibtn("chk-down",i,"↓",null,i===s.checklist.length-1)+ibtn("chk-del",i,"✕","del")+'</div>'+fld("Bold lead (opt.)",inp("checklist."+i+".title",it.title,"Passport validity"),true)+fld("Body",area("checklist."+i+".body",it.body,"Detail…"),true)+'</div>';});
-  h+='<div class="addrow"><button class="add" data-act="chk-add">+ Item</button></div></div></div>';
+  h+=fld("First section heading",inp("checklistHeading",s.checklistHeading,"Before departure"),true);
+  (s.checklist||[]).forEach((it,i)=>{
+    const isHead=typeof it.heading==="string";
+    h+='<div class="card'+(isHead?" sechead":"")+'" draggable="true" data-drag="checklist" data-idx="'+i+'">'+
+      '<div class="card-h"><span class="drag-h" aria-hidden="true">⠿</span><span class="tag" style="background:'+
+      (isHead?"var(--ink2)":"var(--muted)")+'">'+(isHead?"Section":"Item")+'</span><span class="sp"></span>'+
+      ibtn("chk-up",i,"↑",null,i===0)+ibtn("chk-down",i,"↓",null,i===s.checklist.length-1)+
+      ibtn("chk-del",i,"✕","del")+'</div>';
+    h+=isHead
+      ? fld("Section heading",inp("checklist."+i+".heading",it.heading,"On arrival"),true)
+      : fld("Bold lead (opt.)",inp("checklist."+i+".title",it.title,"Passport validity"),true)+
+        fld("Body",area("checklist."+i+".body",it.body,"Detail…"),true);
+    h+='</div>';
+  });
+  h+='<div class="addrow"><button class="add" data-act="chk-add">+ Item</button>'+
+     '<button class="add" data-act="sec-add">+ Section heading</button></div>';
+  /* The wording has to hold on a phone too, where dragging simply does not
+     work: HTML5 drag-and-drop never fires from touch input. */
+  h+='<div class="hint">Reorder with ↑ ↓, or by dragging a card with a mouse. Each item belongs to the nearest section heading above it; items above the first heading use the section heading at the top.</div></div></div>';
 
   h+='<div class="sec"><h2>Document & display</h2><div class="sbody">';
   h+=chk("showCosts",s.showCosts,"Show cost section");
@@ -762,19 +839,160 @@ function updateRates(){const b=document.getElementById("ratesBox");if(b)b.innerH
 /* ===== events ===== */
 form.addEventListener("input",e=>{
   const t=e.target,path=t.getAttribute("data-path");if(!path)return;
+  const prevVal=PREFILLABLE.test(path)?priorValue(path):undefined;
   setPath(state,path,t.type==="checkbox"?t.checked:t.value);
   // Which currencies need a rate depends on the base and on each item's
   // currency, so that editor has to be rebuilt when either changes.
   if(path==="baseCurrency"||path.endsWith(".currency"))updateRates();
+  maybePrefill(path,t.value,prevVal);
   updateSummary();schedulePreview();
 });
+/* Date pickers can commit a value without firing input, so listen for both. */
+form.addEventListener("change",e=>{
+  const t=e.target,path=t.getAttribute("data-path");
+  if(path)maybePrefill(path,t.value,undefined);
+});
+
+/* ===== airport / airline prefill =====
+   Vendored OpenFlights tables (data/, rebuilt by scripts/build-openflights.mjs),
+   fetched once on first use — they are only needed while editing a flight, and
+   the airport table is the larger part of the page's payload. A failed fetch,
+   including opening index.html straight off disk, just leaves prefill inert. */
+let REFP=null;
+const AUTOFILLED=new WeakMap();
+function refData(){
+  if(!REFP)REFP=Promise.all([
+    fetch("data/airports.json").then(r=>r.ok?r.json():{}).catch(()=>({})),
+    fetch("data/airlines.json").then(r=>r.ok?r.json():{}).catch(()=>({}))
+  ]).then(([ap,al])=>({ap,al}));
+  return REFP;
+}
+/* Fills blanks only, never overwrites — including a value typed while the
+   tables were still loading. Writes straight to the field rather than calling
+   renderForm(), which would rebuild the panel and steal the caret. */
+/* A flight often has no date yet when its airport code is typed, and refusing
+   to derive anything then was reported as the offset "not populating no matter
+   what airport code i use". Fall back to the trip start, then today. This is
+   only safe because prefill can now replace what it wrote itself: the moment a
+   real date is entered, the offset is recomputed from it. */
+function usableDate(){
+  for(const c of arguments){
+    const v=String(c||"");
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const y=+v.slice(0,4);if(y>=1900&&y<=2999)return v;}
+  }
+  const t=new Date();
+  return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");
+}
+/* Derives everything an airport code implies on a given date. off/zone are
+   null when the date is missing or half-typed, which is not the same as "this
+   airport has no offset" — the caller must not write anything in that case. */
+function deriveAirport(ap,code,dateStr){
+  if(!own(ap,code))return null;
+  const [city,tz]=ap[code];
+  const out={city,off:null,zone:null};
+  /* Noon keeps the lookup clear of the DST switch itself, which lands in the
+     small hours. dateStr has already been through usableDate(), so a
+     half-typed year like "0002-09-18" never reaches this. */
+  const d=new Date(dateStr+"T12:00:00Z");
+  let p;try{p=tzParts(tz,d,{timeZoneName:"short"});}catch(err){return out;}
+  const off=partsOffMin(p,d.getTime());
+  out.off=String(off);
+  const n=p.timeZoneName||"";
+  out.zone=/^(GMT|UTC)/i.test(n)?shortZoneLabel(off):n;
+  return out;
+}
+/* changedKey/prevVal describe the edit that triggered this, so a changed
+   airport code can be told apart from any other reason to re-run. */
+async function prefillFlight(i,changedKey,prevVal){
+  const {ap,al}=await refData();
+  const e=(state.entities||[])[i];
+  if(!e||e.type!=="flight")return;
+  let hit=false;
+  const marks=AUTOFILLED.get(e)||new Set();
+  AUTOFILLED.set(e,marks);
+  /* Anything typed by hand is untouchable; a value prefill wrote itself may be
+     replaced. Marks live in a WeakMap so they never reach a saved draft or a
+     share link. v of "" clears a field, which only a marked field allows. */
+  const set=(k,v)=>{
+    if(v==null)return;
+    const cur=String(e[k]==null?"":e[k]).trim();
+    if(cur&&!marks.has(k))return;                 /* typed by the user */
+    if(cur===String(v))return;                    /* already correct */
+    e[k]=v;marks.add(k);hit=true;
+    const el=form.querySelector('[data-path="entities.'+i+'.'+k+'"]');
+    if(el&&el!==document.activeElement)el.value=v;
+  };
+  const side=(codeK,dateK,nameK,offK,zoneK)=>{
+    const code=String(e[codeK]||"").trim().toUpperCase();
+    /* When the code changes, whatever the OLD airport implied is stale — but a
+       draft, the sample or a share link arrives with no marks at all, so those
+       values look hand-typed and nothing would ever update. Recognise them by
+       deriving the old code and comparing: a field that still matches what the
+       previous airport implied was plainly derived, so let it be replaced. A
+       genuinely hand-written city will not match, and survives. */
+    if(changedKey===codeK&&prevVal){
+      const was=deriveAirport(ap,String(prevVal).trim().toUpperCase(),usableDate(e[dateK],state.tripStart));
+      if(was&&was.city!==undefined&&String(prevVal).trim().toUpperCase()!==code){
+        if(String(e[nameK]||"")===was.city)marks.add(nameK);
+        if(was.off!=null&&String(e[offK]||"")===was.off)marks.add(offK);
+        if(was.zone!=null&&String(e[zoneK]||"")===was.zone)marks.add(zoneK);
+      }
+    }
+    const now=deriveAirport(ap,code,usableDate(e[dateK],state.tripStart));
+    if(!now)return;
+    set(nameK,now.city);
+    if(now.off==null)return;
+    set(offK,now.off);
+    /* Clearing matters: moving DEN -> LIS must drop "MDT", not leave a Denver
+       label on a Lisbon leg, and Intl has no abbreviation for Lisbon. */
+    set(zoneK,now.zone);
+  };
+  side("originCode","departDate","originName","departOff","departZone");
+  side("destCode","arriveDate","destName","arriveOff","arriveZone");
+  const pre=String(e.flightNos||"").trim().slice(0,2).toUpperCase();
+  if(pre.length===2&&own(al,pre))set("carrier",al[pre]);
+  if(hit){updateSummary();schedulePreview();}
+}
+const PREFILLABLE=/^entities\.(\d+)\.(originCode|destCode|departDate|arriveDate|flightNos)$/;
+/* Fires on input, not on blur. An earlier build waited for the change event,
+   so typing LIS and watching nothing happen until you tabbed away read as the
+   feature being broken. A code is only meaningful at three characters, so that
+   is the trigger. */
+function maybePrefill(path,value,prevVal){
+  const m=PREFILLABLE.exec(path||"");
+  if(!m)return;
+  const k=m[2],v=String(value==null?"":value).trim();
+  if((k==="originCode"||k==="destCode")&&v.length!==3)return;
+  if(k==="flightNos"&&v.length<2)return;
+  prefillFlight(+m[1],k,prevVal);
+}
+/* What prefill needs is the code as it stood before the user began editing —
+   not the value one keystroke ago. Clearing "DEN" and typing "LIS" makes the
+   prior value "LI" by the time the third character lands, which resolves to no
+   airport at all. Captured on focus instead. */
+let editStart=null;
+form.addEventListener("focusin",e=>{
+  const path=e.target&&e.target.getAttribute&&e.target.getAttribute("data-path");
+  if(path&&PREFILLABLE.test(path))editStart={path,value:getPath(state,path)};
+});
+function priorValue(path){
+  return (editStart&&editStart.path===path)?editStart.value:getPath(state,path);
+}
+function getPath(root,path){
+  let o=root;
+  for(const k of String(path).split(".")){
+    if(o==null)return undefined;
+    o=o[/^\d+$/.test(k)?+k:k];
+  }
+  return o;
+}
 
 const SEEDS={
   transport:()=>({type:"transport",owner:"shared",mode:"Train",from:"",to:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   meeting:()=>({type:"meeting",owner:"shared",name:"",location:"",date:"",time:"",endTime:"",withWhom:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   tour:()=>({type:"tour",owner:"shared",name:"",place:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   note:()=>({type:"note",owner:"shared",title:"",body:"",date:"",time:""}),
-  flight:()=>({type:"flight",owner:"shared",carrier:"",flightNos:"",originCode:"",originName:"",departDate:"",departTime:"",departOff:"",departZone:"",destCode:"",destName:"",arriveDate:"",arriveTime:"",arriveOff:"",arriveZone:"",connections:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
+  flight:()=>({type:"flight",owner:"shared",carrier:"",flightNos:"",originCode:"",originName:"",departDate:"",departTime:"",departOff:"",departZone:"",destCode:"",destName:"",arriveDate:"",arriveTime:"",arriveOff:"",arriveZone:"",connections:[],link:"",conf:"",cost:"",currency:"USD",note:""}),
   hotel:()=>({type:"hotel",owner:"shared",name:"",area:"",address:"",checkIn:"",checkOut:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   car:()=>({type:"car",owner:"shared",company:"",pickupPlace:"",pickupDate:"",pickupTime:"",dropoffPlace:"",dropoffDate:"",dropoffTime:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   ground:()=>({type:"ground",owner:"shared",mode:"taxi",from:"",to:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
@@ -782,10 +1000,60 @@ const SEEDS={
   meal:()=>({type:"meal",owner:"shared",name:"",venue:"",date:"",time:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   activity:()=>({type:"activity",owner:"shared",name:"",place:"",date:"",time:"",link:"",conf:"",cost:"",currency:"USD",note:""})
 };
+/* Drag to reorder the checklist. Native HTML5 drag-and-drop, delegated on the
+   form so it survives every renderForm(). Headings and items live in the same
+   flat array, so a drop is one splice — which is exactly why the model is flat. */
+let dragFrom=null;
+const dragCard=t=>(t&&t.closest)?t.closest("[data-drag]"):null;
+form.addEventListener("dragstart",e=>{
+  const card=dragCard(e.target);
+  if(!card)return;
+  dragFrom=+card.getAttribute("data-idx");
+  if(e.dataTransfer){e.dataTransfer.effectAllowed="move";
+    try{e.dataTransfer.setData("text/plain",String(dragFrom));}catch(err){}}
+  card.classList.add("dragging");
+});
+form.addEventListener("dragover",e=>{
+  const card=dragCard(e.target);
+  if(dragFrom==null||!card)return;
+  e.preventDefault();                              /* required, or drop never fires */
+  if(e.dataTransfer)e.dataTransfer.dropEffect="move";
+  form.querySelectorAll(".dragover").forEach(x=>x.classList.remove("dragover"));
+  if(+card.getAttribute("data-idx")!==dragFrom)card.classList.add("dragover");
+});
+form.addEventListener("drop",e=>{
+  const card=dragCard(e.target);
+  if(dragFrom==null||!card)return;
+  e.preventDefault();
+  const to=+card.getAttribute("data-idx"),from=dragFrom;
+  dragFrom=null;
+  if(!(to>=0)||to===from)return;
+  const arr=state.checklist||[];
+  if(from>=arr.length||to>=arr.length)return;
+  markUndo("reorder checklist");
+  arr.splice(to,0,arr.splice(from,1)[0]);
+  renderForm();schedulePreview();
+});
+form.addEventListener("dragend",()=>{
+  dragFrom=null;
+  form.querySelectorAll(".dragging,.dragover").forEach(x=>{x.classList.remove("dragging");x.classList.remove("dragover");});
+});
+
 form.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;
   const act=b.getAttribute("data-act"),i=b.hasAttribute("data-i")?+b.getAttribute("data-i"):null,s=state;
   if(act==="export-person"){exportPDF(buildDocFor(i));return;}
+  if(act==="conn-add"||act==="conn-del"){
+    const en=(s.entities||[])[i];
+    if(!en)return;
+    en.connections=connList(en);            /* migrate the legacy string in place */
+    if(act==="conn-add")en.connections.push({place:"",wait:""});
+    else{markUndo("delete connection");en.connections.splice(+b.getAttribute("data-j"),1);}
+    renderForm();
+    if(act==="conn-add")focusNew("entities."+i+".connections."+(en.connections.length-1));
+    schedulePreview();
+    return;
+  }
   let fx=null;                                   /* path prefix of the row just added */
   if(act==="person-add"){s.people.push({name:"",homeTz:""});fx="people."+(s.people.length-1);}
   else if(act==="person-del"){markUndo("delete traveler");s.people.splice(i,1);if(s.people.length<1)s.people=[{name:""}];s.entities.forEach(en=>{if(en.owner==null||en.owner==="shared")return;const o=+en.owner;if(isNaN(o))return;if(o===i)en.owner="shared";else if(o>i)en.owner=String(o-1);});if(s.people.length<2)s.entities.forEach(en=>{en.owner="shared";});}
@@ -800,6 +1068,7 @@ form.addEventListener("click",e=>{
   else if(act==="ref-up")move(s.emergency,i,-1);
   else if(act==="ref-down")move(s.emergency,i,1);
   else if(act==="chk-add"){s.checklist.push({title:"",body:""});fx="checklist."+(s.checklist.length-1);}
+  else if(act==="sec-add"){s.checklist.push({heading:""});fx="checklist."+(s.checklist.length-1);}
   else if(act==="chk-del"){markUndo("delete checklist item");s.checklist.splice(i,1);}
   else if(act==="chk-up")move(s.checklist,i,-1);
   else if(act==="chk-down")move(s.checklist,i,1);
@@ -840,6 +1109,15 @@ function normalize(st){
   const b=BLANK(),o=Object.assign(b,st);
   const arr=(k,objects)=>{o[k]=Array.isArray(o[k])?(objects?o[k].filter(x=>x&&typeof x==="object"):o[k]):[];};
   arr("entities",true);arr("checklist",true);arr("emergency",true);arr("people",true);arr("titles",false);
+  /* Connections used to be one string. Coerce here rather than at render time:
+     setPath walks the live object, so an editor row bound to
+     entities.0.connections.0.wait would otherwise index into the string and
+     throw "Cannot create property 'wait' on string 'E'". */
+  o.entities.forEach(en=>{
+    if(Array.isArray(en.connections)){en.connections=en.connections.filter(c=>c&&typeof c==="object");return;}
+    const t=String(en.connections==null?"":en.connections).trim();
+    en.connections=t?[{place:t,wait:""}]:[];
+  });
   if(!o.titles.length)o.titles=["Destination"];
   if(!o.people.length)o.people=[{name:""}];
   if(!Array.isArray(o.footer)||o.footer.length<3)o.footer=(Array.isArray(o.footer)?o.footer:[]).concat(["","",""]).slice(0,3);
@@ -859,7 +1137,9 @@ document.getElementById("btnPv").onclick=function(){
   const open=document.body.classList.toggle("pv-open");
   this.textContent=open?"Hide pages":"View pages";
   this.setAttribute("aria-expanded",String(open));
-  if(open)applyScale();
+  /* Both directions: the collapsed height is an inline style, so closing has to
+     recompute it too. Opening only, and "Hide pages" did nothing at all. */
+  applyScale();
 };
 /* Leaves reader mode: dropping the class restores the builder and the rest of
    the toolbar in one go. */

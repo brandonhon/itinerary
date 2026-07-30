@@ -1,9 +1,13 @@
 # Itinerary Builder
 
-A static, dependency-free travel itinerary builder that produces a typeset,
-print-ready document. It's plain HTML, CSS, and JavaScript — no build step, no
-server, no install. Open `index.html` in a browser, or host the folder on any
-static host such as GitHub Pages.
+A static travel itinerary builder that produces a typeset, print-ready
+document. The site is plain HTML, CSS, and JavaScript — nothing to build, no
+server, nothing to install. Open `index.html` in a browser, or host the folder
+on any static host such as GitHub Pages.
+
+The one exception is the airport lookup tables in `data/`, which are generated
+and committed. Regenerating them needs Node and a single package; using or
+hosting the site does not.
 
 Fill in the form on the left; the right side is a live preview of the actual
 printed pages. Every page in that preview is a real sheet of US Letter, so what
@@ -48,7 +52,12 @@ It always opens with the first flight and closes with the last. Timeline colours
 are assigned automatically from the active theme.
 
 Alongside the journey you get a reference rail: confirmation numbers, a costed
-breakdown, a pre-departure checklist, and emergency contacts.
+breakdown, a checklist, and emergency contacts.
+
+Flights take any number of connections — each one an airport and a layover, and
+they print on a single Via line. The checklist can hold more than one section:
+add a section heading and every item below it belongs to that section, and cards
+can be dragged to reorder (↑/↓ do the same thing from the keyboard).
 
 ### Multiple travelers
 
@@ -134,9 +143,12 @@ they are collapsed.
 
 ## Requirements and dependencies
 
-Runs from `file://` — no server needed. Tested in current Chrome.
+Runs from `file://` for everything except airport prefill, which reads the
+bundled JSON tables and so needs the folder served over HTTP (`python3 -m
+http.server` is enough). Everything else — editing, preview, print, PDF, share
+links — works straight off disk. Tested in current Chrome.
 
-Two things load from a CDN, both optional:
+Two things load from a CDN at runtime, both optional:
 
 - **IBM Plex** (Google Fonts) for typography. Offline, it falls back to
   Helvetica/Arial; pagination still measures correctly because it waits on font
@@ -146,6 +158,10 @@ Two things load from a CDN, both optional:
   browser. Without a network connection, Export PDF falls back to the print
   dialog. **Print** never needs the network.
 
+Nothing else is fetched, and the page loads no third-party JavaScript. Separately
+from all of this, `package.json` pins one package used only to regenerate
+`data/` — see below. It never reaches the browser.
+
 ## Project layout
 
 ```
@@ -153,6 +169,10 @@ index.html      markup shell + the print stylesheet held as inert text
 css/app.css     styles for the builder UI (form + preview chrome)
 js/app.js       state, form rendering, pagination, and print/PDF/share plumbing
 favicon.svg     the mark; favicon.ico is the fallback for browsers without SVG
+data/           airport and airline lookup tables (generated, committed)
+scripts/        build-data.mjs, regenerates data/ (build-time only)
+package.json    the one build-time dependency; the site itself uses none
+.github/        workflow that refreshes data/ twice a year
 ```
 
 - `index.html` also carries `#itin-css`, a `<script type="text/plain">` block
@@ -166,3 +186,46 @@ favicon.svg     the mark; favicon.ico is the fallback for browsers without SVG
 
 Paths are relative, so the folder can be served from any subdirectory (as
 GitHub Pages does) without configuration.
+
+## Airport and airline data
+
+Typing an airport code fills in the city, the UTC offset and the timezone; the
+first two characters of the flight number fill in the carrier. It fires as soon
+as the third character of the code lands — no need to leave the field.
+
+The offset is worked out for that flight's own date. If you haven't set one yet
+it falls back to the trip start, then to today, and corrects itself the moment a
+date is entered — so a brand-new flight still fills in straight away.
+
+Timezone shows a real abbreviation where one exists (`MDT`) and a compact offset
+where it doesn't (`UTC+1`). Most of the world has no standard abbreviation, and
+a plain offset beats both a blank field and a wrong guess.
+
+Prefill only fills blanks, and it will replace a value it filled itself but
+never one you typed. So changing the airport code updates the city it guessed,
+while a city you wrote by hand stays put.
+
+The tables live in `data/` and are committed rather than fetched at runtime, so
+the page depends on no third-party host while it runs. Regenerate them with:
+
+```sh
+npm install && node scripts/build-data.mjs
+```
+
+That is the only thing in this repo with a dependency, and it is build-time
+only — the published site is still plain HTML, CSS and JavaScript.
+
+`.github/workflows/refresh-airport-data.yml` does this on 1 January and 1 July.
+It is worth running: new airports open, and daylight-saving rule changes are
+handled by the browser's own timezone database rather than by these files. A
+stale table means a prefill doesn't happen, never a wrong itinerary.
+
+> Note: GitHub disables scheduled workflows in a repository with no activity for
+> 60 days, which a six-monthly job can trip over. If a refresh never appears,
+> re-enable it from the Actions tab, or run it there by hand.
+
+Airport data from [OurAirports](https://ourairports.com/data/), released into
+the public domain, with each timezone resolved from the airport's own
+coordinates at build time via [tz-lookup](https://www.npmjs.com/package/tz-lookup).
+Airline names from [OpenFlights](https://openflights.org/data.html), used under
+the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/).

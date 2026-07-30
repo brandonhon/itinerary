@@ -115,3 +115,26 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
   body.from-link .barsel,body.from-link .bar .btn,body.from-link .bar label.btn{display:none}
   body.from-link #btnEdit,body.from-link #btnPdf{display:inline-block}
 }
+.grid.conn{grid-template-columns:1fr 1fr auto;align-items:end;gap:8px;margin-bottom:7px}
+/* Checklist drag-to-reorder. The handle is an affordance only — the whole card
+   is the drag source, since HTML5 DnD drags the element carrying draggable. */
+.drag-h{font-family:var(--mono);font-size:12px;color:var(--faint);cursor:grab}
+.card.dragging{opacity:.45}
+.card.dragover{outline:2px dashed var(--muted);outline-offset:2px}
+.card.sechead{border-left-color:var(--ink2);background:var(--panel2)}
+
+/* ── touch pointers ───────────────────────────
+   Keyed on pointer type rather than viewport width, because the thing that
+   actually differs is the finger. Icon buttons are 24px and fields 30px, which
+   are comfortable with a mouse and fiddly without one. */
+@media (pointer: coarse){
+  .ic{width:36px;height:36px;font-size:14px}
+  .f{min-height:38px}
+  .add{min-height:36px;padding:8px 11px}
+  .btn{padding:9px 12px}
+  .ck{padding:4px 0}
+  .ck input[type=checkbox]{width:20px;height:20px}
+  /* A false affordance here: drag-and-drop is mouse-only, so the handle would
+     invite a gesture that cannot work. ↑/↓ do the same job. */
+  .drag-h{display:none}
+}
