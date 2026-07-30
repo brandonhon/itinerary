@@ -78,3 +78,7 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
 .tip{max-width:848px;margin:14px auto 0;font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:6px;padding:11px 13px}
 .tip b{color:var(--ink)}
 @media (max-width:900px){.wrap{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.form{border-right:0;border-bottom:1px solid var(--line)}}
+/* Warning variant of .hint — for conditions that silently degrade the output
+   (a flight missing its UTC offsets) rather than for standing guidance. */
+.hint.warn{color:#8a5a1f;background:#fdf6ea;border-left:2px solid #c8912f;padding:6px 9px;border-radius:0 3px 3px 0}
+.btn:disabled{opacity:.34;cursor:default;background:transparent}

@@ -18,11 +18,10 @@ const MODE={taxi:"Taxi",rideshare:"Rideshare",private:"Private car"};
 const TYPES={flight:{label:"Flight",c:"#20456B"},hotel:{label:"Hotel",c:"#00786D"},car:{label:"Rental car",c:"#96631A"},ground:{label:"Ground",c:"#6B2E5A"},entertainment:{label:"Entertainment",c:"#7A3A5A"},meal:{label:"Meal",c:"#5C6B2E"},activity:{label:"Activity",c:"#37507A"},transport:{label:"Transport",c:"#2E5A6B"},meeting:{label:"Meeting / work",c:"#4B3A6B"},tour:{label:"Tour",c:"#45632E"},note:{label:"Note",c:"#8A5A1F"}};
 const CURRENCIES=["USD","HKD","MOP","EUR","GBP","JPY","CNY","CAD","AUD","SGD","KRW","THB"];
 const SYM={USD:"$",HKD:"HK$",MOP:"MOP ",EUR:"€",GBP:"£",JPY:"¥",CNY:"¥",CAD:"C$",AUD:"A$",SGD:"S$",KRW:"₩",THB:"฿"};
-const OFFSETS=(()=>{const a=[["","—"]];for(let m=-720;m<=840;m+=60){const s=m<0?"−":"+";const am=Math.abs(m);const hh=String(Math.floor(am/60)).padStart(2,"0");const mm=String(am%60).padStart(2,"0");a.push([String(m),"UTC"+s+hh+":"+mm]);}return a;})();
 /* Home zones are picked by name, not by UTC offset — few people know their own
    offset, and a fixed offset is simply wrong on the far side of a DST change.
    The offset is derived from the zone at the actual instant instead. Flight
-   legs still use OFFSETS: those are per-airport and often in a zone the
+   legs still use a raw offset: those are per-airport and often in a zone the
    traveler never sets foot in outside the layover. */
 /* One entry per distinct year-round behaviour, named for the best-known city
    that has it — 57 instead of the IANA list's 418.
@@ -77,6 +76,7 @@ function tzOptions(){
        read UTC−04:00), and so is sorting the pair low-to-high: Halifax and
        Santiago both span −04:00/−03:00 and differ only in which half of the
        year each applies to. */
+    TZ_OFFSET_SET.add(j);TZ_OFFSET_SET.add(u);
     const meta=(j===u)?offLabel(j):offLabel(j)+"/"+offLabel(u).replace(/^UTC/,"");
     (groups[region]=groups[region]||[]).push([tz,tzCity(tz)+(abbr?" · "+abbr:"")+" ("+meta+")"]);
   });
@@ -85,6 +85,22 @@ function tzOptions(){
     return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);
   }).map(n=>[n,groups[n].sort((a,b)=>a[1].localeCompare(b[1]))]);
   return TZOPTS;
+}
+/* Whole hours alone miss real places — India is +05:30, Nepal +05:45,
+   Newfoundland −03:30, the Chatham Islands +12:45 — so a flight to any of them
+   could not have its offset entered at all, and both the elapsed time and the
+   home-time line came out 30 to 45 minutes wrong. The fractional entries come
+   from the zone table, which already covers every real offset exactly once, so
+   this list follows TZ_ZONES rather than having to be maintained separately. */
+const TZ_OFFSET_SET=new Set();
+let OFFSET_OPTS=null;
+function offsetOpts(){
+  if(OFFSET_OPTS)return OFFSET_OPTS;
+  tzOptions();                                          /* fills TZ_OFFSET_SET */
+  const set=new Set(TZ_OFFSET_SET);
+  for(let m=-720;m<=840;m+=60)set.add(m);
+  OFFSET_OPTS=[["","—"]].concat([...set].sort((a,b)=>a-b).map(m=>[String(m),offLabel(m)]));
+  return OFFSET_OPTS;
 }
 const WD=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
@@ -96,8 +112,11 @@ function dow(iso){const [y,m,d]=parseISO(iso);if(!y)return null;return new Date(
 function fmtStamp(iso){const w=dow(iso);if(w==null)return "";return WD[w]+" "+parseISO(iso)[2];}
 function dayNum(iso){const d=parseISO(iso)[2];return d?String(d):"";}
 function nightsBetween(a,b){const ea=toEpoch(a),eb=toEpoch(b);if(ea==null||eb==null)return 0;const n=Math.round((eb-ea)/86400000);return n>0?n:0;}
-function fmtLong(iso){const [y,m,d]=parseISO(iso);if(!y)return "";return d+" "+MON[m-1]+" "+y;}
-function fmtRange(a,b){const [ay,am,ad]=parseISO(a),[by,bm,bd]=parseISO(b);if(!ay)return fmtLong(b);if(!by)return fmtLong(a);if(ay===by&&am===bm)return ad+" – "+bd+" "+MON[am-1]+" "+ay;if(ay===by)return ad+" "+MON[am-1]+" – "+bd+" "+MON[bm-1]+" "+ay;return ad+" "+MON[am-1]+" "+ay+" – "+bd+" "+MON[bm-1]+" "+by;}
+/* Month is only range-checked here: hand-edited JSON and share links can carry
+   anything, and an out-of-range index printed the literal word "undefined"
+   into the document ("1 – 5 undefined 2026"). */
+function fmtLong(iso){const [y,m,d]=parseISO(iso);if(!y||!d||!MON[m-1])return "";return d+" "+MON[m-1]+" "+y;}
+function fmtRange(a,b){const [ay,am,ad]=parseISO(a),[by,bm,bd]=parseISO(b);if(!ay||!MON[am-1])return fmtLong(b);if(!by||!MON[bm-1])return fmtLong(a);if(ay===by&&am===bm)return ad+" – "+bd+" "+MON[am-1]+" "+ay;if(ay===by)return ad+" "+MON[am-1]+" – "+bd+" "+MON[bm-1]+" "+ay;return ad+" "+MON[am-1]+" "+ay+" – "+bd+" "+MON[bm-1]+" "+by;}
 function epUTC(iso,tm,off){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y)return null;let hh=0,mm=0;if(tm){const t=tm.split(":");hh=+t[0]||0;mm=+t[1]||0;}let ms=Date.UTC(y,m-1,d,hh,mm);if(off!==""&&off!=null&&!isNaN(+off))ms-=(+off)*60000;return ms;}
 function elapsedStr(f){const a=epUTC(f.departDate,f.departTime,f.departOff),b=epUTC(f.arriveDate,f.arriveTime,f.arriveOff);if(a==null||b==null)return "";let mins=Math.round((b-a)/60000);if(mins<0)return "";const approx=(f.departOff===""||f.arriveOff===""||f.departOff==null||f.arriveOff==null);const h=Math.floor(mins/60),mm=mins%60;return (approx?"~":"")+h+"h "+String(mm).padStart(2,"0")+"m";}
 function num(x){const n=parseFloat(String(x==null?"":x).replace(/[, ]/g,""));return isNaN(n)?0:n;}
@@ -120,6 +139,7 @@ function homeLine(dateIso,timeStr,off){
     const n=p.timeZoneName||"";abbr=/^(GMT|UTC)/i.test(n)?"":n;
   }else{
     homeOff=+hm.off;
+    if(!isFinite(homeOff))return null;   /* garbage in a hand-edited draft */
     const d=new Date(utc+homeOff*60000);
     wd=WD[d.getUTCDay()];hh=pad(d.getUTCHours());mm=pad(d.getUTCMinutes());
   }
@@ -533,12 +553,33 @@ window.addEventListener("message",function(ev){
 function refreshPreview(){frame.srcdoc=buildDoc(state);}
 frame.addEventListener("load",measureFrame);
 function saveDraft(){try{localStorage.setItem("itin-draft-v4",JSON.stringify(state));}catch(e){}}
+/* One level of undo, covering the actions that destroy work with no way back:
+   the ✕ buttons, and the three that replace the whole trip. "Load sample" is
+   the sharpest of those — it wipes everything without even asking. Deliberately
+   not wired to Ctrl+Z, which would fight the browser's own undo inside a text
+   field. */
+let undoSnap=null,undoWhat="";
+function markUndo(what){undoSnap=JSON.stringify(state);undoWhat=what;paintUndo();}
+function paintUndo(){
+  const b=document.getElementById("btnUndo");if(!b)return;
+  b.disabled=!undoSnap;
+  b.title=undoSnap?("Undo "+undoWhat):"Nothing to undo";
+  b.textContent=undoSnap?("Undo "+undoWhat):"Undo";
+}
+function doUndo(){
+  if(!undoSnap)return;
+  try{state=JSON.parse(undoSnap);}catch(e){return;}
+  undoSnap=null;undoWhat="";
+  renderForm();refreshPreview();saveDraft();paintUndo();
+}
 function schedulePreview(){clearTimeout(pvTimer);pvTimer=setTimeout(()=>{refreshPreview();saveDraft();},180);}
 window.addEventListener("resize",applyScale);
 
 /* ===== form ===== */
 const form=document.getElementById("form");
-function inp(path,val,ph,mono){return '<input class="f'+(mono?" mono":"")+'" data-path="'+path+'" value="'+esc(val)+'" placeholder="'+esc(ph||"")+'">';}
+/* aria is for the few inputs that stand alone without a fld() label — a
+   placeholder is not a name, and it disappears as soon as you type. */
+function inp(path,val,ph,mono,aria){return '<input class="f'+(mono?" mono":"")+'" data-path="'+path+'"'+(aria?' aria-label="'+esc(aria)+'"':"")+' value="'+esc(val)+'" placeholder="'+esc(ph||"")+'">';}
 function area(path,val,ph){return '<textarea class="f" data-path="'+path+'" placeholder="'+esc(ph||"")+'">'+esc(val)+'</textarea>';}
 function dateF(path,val){return '<input type="date" class="f" data-path="'+path+'" value="'+esc(val)+'">';}
 function timeF(path,val){return '<input type="time" class="f" data-path="'+path+'" value="'+esc(val)+'">';}
@@ -549,8 +590,23 @@ function selGroups(path,val,groups){
   return '<select class="f" data-path="'+path+'"><option value=""'+(val?"":" selected")+'>—</option>'+o+'</select>';
 }
 function chk(path,val,label){return '<label class="ck"><input type="checkbox" data-path="'+path+'"'+(val?" checked":"")+'> '+esc(label)+'</label>';}
-function fld(lb,ctl,wide){return '<div class="field'+(wide?" wide":"")+'"><label class="lb">'+lb+'</label>'+ctl+'</div>';}
-function ibtn(act,i,sym,cls,dis){return '<button class="ic'+(cls?" "+cls:"")+'" data-act="'+act+'" data-i="'+i+'"'+(dis?" disabled":"")+'>'+sym+'</button>';}
+/* A label sitting next to an input is not attached to it — a screen reader
+   announces every one of these as an unnamed edit box. The control is built as
+   a string before fld() sees it, so stamp an id on its opening tag and point
+   the label at it. Ids only need to be unique within the document, so a render
+   counter is enough. */
+let FIELD_N=0;
+function fld(lb,ctl,wide){
+  const id="fld"+(++FIELD_N);
+  const tagged=String(ctl).replace(/^<(input|select|textarea)\b/,'<$1 id="'+id+'"');
+  return '<div class="field'+(wide?" wide":"")+'"><label class="lb" for="'+id+'">'+lb+'</label>'+tagged+'</div>';
+}
+/* Icon buttons read as "✕" / "↑" / "↓" with nothing else to go on. */
+const IBTN_LABEL={"✕":"Delete","↑":"Move up","↓":"Move down"};
+function ibtn(act,i,sym,cls,dis){
+  const name=(own(IBTN_LABEL,sym)?IBTN_LABEL[sym]:act)+" item "+(i+1);
+  return '<button class="ic'+(cls?" "+cls:"")+'" data-act="'+act+'" data-i="'+i+'" aria-label="'+esc(name)+'"'+(dis?" disabled":"")+'>'+sym+'</button>';
+}
 function ownerOpts(){return [["shared","Both / all travelers"]].concat(people().map((p,idx)=>[String(idx),p.name||("Traveler "+(idx+1))]));}
 
 function tail(e,i){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
@@ -560,11 +616,16 @@ function entityCard(e,i){
   if(multi())h+=fld("Traveler",sel(p+".owner",e.owner||"shared",ownerOpts()),true);
   if(e.type==="flight"){
     h+='<div class="sub-h">Departure</div><div class="grid three">'+fld("From code",inp(p+".originCode",e.originCode,"DEN"))+fld("From city",inp(p+".originName",e.originName,"Denver"))+fld("Zone label",inp(p+".departZone",e.departZone,"MDT"))+'</div>';
-    h+='<div class="grid three">'+fld("Depart date",dateF(p+".departDate",e.departDate))+fld("Depart time",timeF(p+".departTime",e.departTime))+fld("UTC offset",sel(p+".departOff",e.departOff,OFFSETS))+'</div>';
+    h+='<div class="grid three">'+fld("Depart date",dateF(p+".departDate",e.departDate))+fld("Depart time",timeF(p+".departTime",e.departTime))+fld("UTC offset",sel(p+".departOff",e.departOff,offsetOpts()))+'</div>';
     h+='<div class="sub-h">Arrival</div><div class="grid three">'+fld("To code",inp(p+".destCode",e.destCode,"LIS"))+fld("To city",inp(p+".destName",e.destName,"Lisbon"))+fld("Zone label",inp(p+".arriveZone",e.arriveZone,"WEST"))+'</div>';
-    h+='<div class="grid three">'+fld("Arrive date",dateF(p+".arriveDate",e.arriveDate))+fld("Arrive time",timeF(p+".arriveTime",e.arriveTime))+fld("UTC offset",sel(p+".arriveOff",e.arriveOff,OFFSETS))+'</div>';
+    h+='<div class="grid three">'+fld("Arrive date",dateF(p+".arriveDate",e.arriveDate))+fld("Arrive time",timeF(p+".arriveTime",e.arriveTime))+fld("UTC offset",sel(p+".arriveOff",e.arriveOff,offsetOpts()))+'</div>';
     h+='<div class="grid">'+fld("Carrier",inp(p+".carrier",e.carrier,"United"))+fld("Flight numbers",inp(p+".flightNos",e.flightNos,"UA0918, UA1450",true))+'</div>';
     h+=fld("Connections / layover",inp(p+".connections",e.connections,"EWR · 1h 40m"),true);
+    /* Without both offsets the elapsed time is only a guess and the home-time
+       line cannot be worked out at all — but both failures are silent, so say
+       so on the card rather than letting the output quietly degrade. */
+    if((e.departTime||e.arriveTime)&&(!e.departOff||!e.arriveOff))
+      h+='<div class="hint warn">⚠ Set both UTC offsets. Without them the elapsed time is approximate (shown with ~) and the home-time line is left out entirely.</div>';
     h+='<div class="hint">Flight numbers: comma-separated, displayed with arrows. Set both UTC offsets for an exact elapsed time; the zone label is just for display.</div>';
     h+=tail(e,i);
   } else if(e.type==="hotel"){
@@ -595,19 +656,19 @@ function summaryHTML(){const ppl=people(),mm=ppl.length>1;let h='<div class="row
 
 function ratesEditor(){const base=state.baseCurrency||"USD";/* Only known currencies get a rate row: the code goes into a data-path, and
    trip data from a share link can put anything in e.currency. */
-  const used=[...new Set(ents().map(e=>e.currency||"USD"))].filter(c=>c&&c!==base&&CURRENCIES.indexOf(c)>-1);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" value="'+esc(v)+'" placeholder="rate"><span class="rsuf">'+esc(cur)+'</span></div>';});return h;}
+  const used=[...new Set(ents().map(e=>e.currency||"USD"))].filter(c=>c&&c!==base&&CURRENCIES.indexOf(c)>-1);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" aria-label="'+esc(cur+" per "+base)+'" value="'+esc(v)+'" placeholder="rate"><span class="rsuf">'+esc(cur)+'</span></div>';});return h;}
 
 function renderForm(){
   const s=state;let h="";
   h+='<div class="sec"><h2>Header</h2><div class="sbody">';
   h+=fld("Eyebrow",inp("eyebrow",s.eyebrow,"Travel Itinerary"),true);
   h+='<div class="sub-h">Travelers</div>';
-  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+'</div>';});
+  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name",false,"Traveler "+(i+1)+" name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="person-add">+ Add traveler</button></div>';
   h+='<div class="hint">Zones that shift for daylight saving list both offsets, January first. The itinerary works out which one applies on each date.</div>';
   if(people().length>1)h+='<div class="hint">Each traveler gets its own page. Assign flights (and anything else that differs) to a traveler; leave shared items on “Both / all.”</div>';
   h+='<div class="sub-h">Titles</div>';
-  (s.titles||[]).forEach((t,i)=>{h+='<div class="tt">'+inp("titles."+i,t,"City")+ibtn("title-up",i,"↑",null,i===0)+ibtn("title-down",i,"↓",null,i===s.titles.length-1)+ibtn("title-del",i,"✕","del",s.titles.length<=1)+'</div>';});
+  (s.titles||[]).forEach((t,i)=>{h+='<div class="tt">'+inp("titles."+i,t,"City",false,"Destination title "+(i+1))+ibtn("title-up",i,"↑",null,i===0)+ibtn("title-down",i,"↓",null,i===s.titles.length-1)+ibtn("title-del",i,"✕","del",s.titles.length<=1)+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="title-add">+ Title</button></div>';
   h+='<div class="grid" style="margin-top:11px">'+fld("Trip start",dateF("tripStart",s.tripStart))+fld("Trip end",dateF("tripEnd",s.tripEnd))+'</div>';
   h+='<div class="hint">Nights, route line, stats and the date range are calculated automatically.</div></div></div>';
@@ -700,19 +761,19 @@ form.addEventListener("click",e=>{
   if(act==="export-person"){exportPDF(buildDocFor(i));return;}
   let fx=null;                                   /* path prefix of the row just added */
   if(act==="person-add"){s.people.push({name:"",homeTz:""});fx="people."+(s.people.length-1);}
-  else if(act==="person-del"){s.people.splice(i,1);if(s.people.length<1)s.people=[{name:""}];s.entities.forEach(en=>{if(en.owner==null||en.owner==="shared")return;const o=+en.owner;if(isNaN(o))return;if(o===i)en.owner="shared";else if(o>i)en.owner=String(o-1);});if(s.people.length<2)s.entities.forEach(en=>{en.owner="shared";});}
+  else if(act==="person-del"){markUndo("delete traveler");s.people.splice(i,1);if(s.people.length<1)s.people=[{name:""}];s.entities.forEach(en=>{if(en.owner==null||en.owner==="shared")return;const o=+en.owner;if(isNaN(o))return;if(o===i)en.owner="shared";else if(o>i)en.owner=String(o-1);});if(s.people.length<2)s.entities.forEach(en=>{en.owner="shared";});}
   else if(act==="title-add"){s.titles.push("");fx="titles."+(s.titles.length-1);}
-  else if(act==="title-del"){if(s.titles.length>1)s.titles.splice(i,1);}
+  else if(act==="title-del"){if(s.titles.length>1){markUndo("delete title");s.titles.splice(i,1);}}
   else if(act==="title-up")move(s.titles,i,-1);
   else if(act==="title-down")move(s.titles,i,1);
   else if(act.startsWith("add-")){const k=act.slice(4);if(own(SEEDS,k)){s.entities.push(SEEDS[k]());fx="entities."+(s.entities.length-1);}}
-  else if(act==="ent-del")s.entities.splice(i,1);
+  else if(act==="ent-del"){markUndo("delete item");s.entities.splice(i,1);}
   else if(act==="ref-add"){(s.emergency=s.emergency||[]).push({label:"",value:""});fx="emergency."+(s.emergency.length-1);}
-  else if(act==="ref-del")s.emergency.splice(i,1);
+  else if(act==="ref-del"){markUndo("delete reference");s.emergency.splice(i,1);}
   else if(act==="ref-up")move(s.emergency,i,-1);
   else if(act==="ref-down")move(s.emergency,i,1);
   else if(act==="chk-add"){s.checklist.push({title:"",body:""});fx="checklist."+(s.checklist.length-1);}
-  else if(act==="chk-del")s.checklist.splice(i,1);
+  else if(act==="chk-del"){markUndo("delete checklist item");s.checklist.splice(i,1);}
   else if(act==="chk-up")move(s.checklist,i,-1);
   else if(act==="chk-down")move(s.checklist,i,1);
   else return;
@@ -744,14 +805,27 @@ async function gunzipToStr(u8){
   return new TextDecoder().decode(await new Blob(parts).arrayBuffer());
 }
 async function shareLink(){const base=location.href.split("#")[0];const json=JSON.stringify(state);if(typeof CompressionStream!=="undefined"){try{const gz=await gzipStr(json);return base+"#z="+b64url(u8ToB64(gz));}catch(e){}}return base+"#data="+encodeURIComponent(encodeState());}
-function normalize(st){const b=BLANK();const o=Object.assign(b,st);if(!o.titles||!o.titles.length)o.titles=["Destination"];if(!o.people||!o.people.length)o.people=[{name:""}];if(!o.footer||o.footer.length<3)o.footer=(o.footer||[]).concat(["","",""]).slice(0,3);o.entities=o.entities||[];return o;}
+/* Trip data arrives from share links and hand-edited JSON, so anything that
+   gets iterated has to actually be an array of objects. A stray value here
+   throws inside renderForm(), which init() calls outside its try/catch — the
+   form never renders and the tab is dead until the URL is cleared. */
+function normalize(st){
+  const b=BLANK(),o=Object.assign(b,st);
+  const arr=(k,objects)=>{o[k]=Array.isArray(o[k])?(objects?o[k].filter(x=>x&&typeof x==="object"):o[k]):[];};
+  arr("entities",true);arr("checklist",true);arr("emergency",true);arr("people",true);arr("titles",false);
+  if(!o.titles.length)o.titles=["Destination"];
+  if(!o.people.length)o.people=[{name:""}];
+  if(!Array.isArray(o.footer)||o.footer.length<3)o.footer=(Array.isArray(o.footer)?o.footer:[]).concat(["","",""]).slice(0,3);
+  return o;
+}
 
 /* ===== toolbar ===== */
-document.getElementById("btnSample").onclick=()=>{state=SAMPLE();renderForm();refreshPreview();saveDraft();};
-document.getElementById("btnBlank").onclick=()=>{if(confirm("Clear everything and start blank?")){state=BLANK();renderForm();refreshPreview();saveDraft();}};
+document.getElementById("btnSample").onclick=()=>{markUndo("load sample");state=SAMPLE();renderForm();refreshPreview();saveDraft();};
+document.getElementById("btnBlank").onclick=()=>{if(confirm("Clear everything and start blank?")){markUndo("clear");state=BLANK();renderForm();refreshPreview();saveDraft();}};
 document.getElementById("btnSave").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=slug((state.titles||[]).filter(Boolean).join("-"))+"-itinerary.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
 document.getElementById("btnLink").onclick=async ()=>{const link=await shareLink();const done=()=>{const btn=document.getElementById("btnLink");const o=btn.textContent;btn.textContent="Copied ✓";setTimeout(()=>btn.textContent=o,1400);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(link).then(done,()=>prompt("Copy this link:",link));}else prompt("Copy this link:",link);};
-document.getElementById("fileLoad").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{state=normalize(JSON.parse(r.result));renderForm();refreshPreview();saveDraft();}catch(err){alert("Could not read that file: "+err.message);}};r.readAsText(f);e.target.value="";};
+document.getElementById("fileLoad").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const next=normalize(JSON.parse(r.result));markUndo("load file");state=next;renderForm();refreshPreview();saveDraft();}catch(err){alert("Could not read that file: "+err.message);}};r.readAsText(f);e.target.value="";};
+document.getElementById("btnUndo").onclick=doUndo;
 document.getElementById("themeSel").onchange=function(){state.theme=this.value;refreshPreview();saveDraft();};
 function loadScript(src,integrity){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;if(integrity){s.integrity=integrity;s.crossOrigin="anonymous";}s.onload=res;s.onerror=function(){rej(new Error("load failed"));};document.head.appendChild(s);});}
 /* The only third-party code that runs here, and it runs with full access to the
@@ -856,5 +930,5 @@ document.getElementById("btnPrint").onclick=function(){printDoc(buildDoc(state))
   if(zh){try{state=normalize(JSON.parse(await gunzipToStr(b64ToU8(unb64url(zh[1])))));}catch(e){}}
   else if(dh){try{state=normalize(decodeState(decodeURIComponent(dh[1])));}catch(e){}}
   else{try{const d=localStorage.getItem("itin-draft-v4");if(d)state=normalize(JSON.parse(d));}catch(e){}}
-  renderForm();refreshPreview();
+  renderForm();refreshPreview();paintUndo();
 })();
