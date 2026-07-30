@@ -82,3 +82,36 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
    (a flight missing its UTC offsets) rather than for standing guidance. */
 .hint.warn{color:#8a5a1f;background:#fdf6ea;border-left:2px solid #c8912f;padding:6px 9px;border-radius:0 3px 3px 0}
 .btn:disabled{opacity:.34;cursor:default;background:transparent}
+
+/* ── phone ────────────────────────────────────
+   The preview is a fixed 8.5in sheet. Scaled to fit a 390px screen it renders
+   11px print type at about 4.5px, which is unreadable — and no amount of
+   responsive CSS fixes that, because the paper is a fixed artifact. So below
+   this width the pages collapse behind a toggle and are then shown at natural
+   size, where the phone's own pinch-zoom acts on real text rather than on a
+   transform. The form needs no help: it already stacks and fills the width. */
+.pv-toggle{display:none;font-family:var(--mono);font-size:10px;letter-spacing:.06em;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 10px;cursor:pointer}
+#btnEdit{display:none}
+
+@media (max-width:700px){
+  .pv-toggle{display:inline-block}
+  /* Clipped to nothing rather than display:none — a hidden iframe never fires
+     requestAnimationFrame, so the paginator inside would never run and the
+     "N pages" count that the collapsed strip advertises would never arrive. */
+  #pvwrap{overflow:hidden;max-width:none}
+  body.pv-open #pvwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tip{display:none}
+  body.pv-open .tip{display:block}
+  .preview{padding:14px}
+  .pv-head{margin-bottom:10px}
+  .pv-head .t{font-size:9px}
+
+  /* A share link opened on a phone is someone reading the trip, not editing
+     it. Lead with the document and drop the builder; "Edit this trip" removes
+     the class and everything comes back. */
+  body.from-link .form{display:none}
+  body.from-link .wrap{grid-template-rows:1fr}
+  body.from-link .pv-toggle{display:none}
+  body.from-link .barsel,body.from-link .bar .btn,body.from-link .bar label.btn{display:none}
+  body.from-link #btnEdit,body.from-link #btnPdf{display:inline-block}
+}

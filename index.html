@@ -189,6 +189,7 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
     <button class="btn" id="btnSample">Load sample</button>
     <button class="btn" id="btnBlank">New / blank</button>
     <button class="btn" id="btnUndo" disabled>Undo</button>
+    <button class="btn pri" id="btnEdit">Edit this trip</button>
     <button class="btn" id="btnLink">Copy link</button>
     <button class="btn" id="btnSave">Save data</button>
     <label class="btn" for="fileLoad">Load data</label>
@@ -199,7 +200,7 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
   <div class="wrap">
     <div class="form" id="form"></div>
     <div class="preview">
-      <div class="pv-head"><span class="t">Live preview · auto-generated</span><span class="sp"></span><span class="pv-warn" id="warnTag"></span><span class="pv-scale" id="pageTag"></span><span class="pv-scale" id="scaleTag"></span></div>
+      <div class="pv-head"><span class="t">Live preview · auto-generated</span><span class="sp"></span><span class="pv-warn" id="warnTag"></span><span class="pv-scale" id="pageTag"></span><span class="pv-scale" id="scaleTag"></span><button class="pv-toggle" id="btnPv" aria-expanded="false">View pages</button></div>
       <!-- sandbox without allow-same-origin puts the generated document in its
            own opaque origin, so trip data from a share link cannot reach this
            page's localStorage even if the escaping in js/app.js ever slips.

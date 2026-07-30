@@ -483,7 +483,17 @@ function go(){
   try{parent.postMessage({itin:"paginated",pages:n,over:OVERSIZE,height:contentHeight()},ITIN_ORIGIN);}catch(e){}
 }
 var fired=false;
-function once(){if(fired)return;fired=true;requestAnimationFrame(go);}
+function once(){
+  if(fired)return;fired=true;
+  /* Waiting a frame is a preference, not a dependency: rAF is throttled to
+     nothing inside a cross-origin iframe that is hidden or clipped out of
+     view, which is exactly what the phone layout does to collapse the
+     preview. Measuring still works there — only the callback is withheld —
+     so race a short timer against the frame and take whichever arrives. */
+  var ran=false,run=function(){if(ran)return;ran=true;go();};
+  requestAnimationFrame(run);
+  setTimeout(run,50);
+}
 setTimeout(once,3000);                             /* fonts.ready can hang offline */
 if(D.fonts&&D.fonts.ready)D.fonts.ready.then(once,once);else once();
 })();`;
@@ -515,8 +525,25 @@ const FRAME_SLACK=48;
    drop-shadow shows on the right as it does on the left. Matches #frame in
    css/app.css. */
 const FRAME_W=848;
+/* Below this width the paper cannot be scaled down and stay legible, so it is
+   shown at natural size and left to the browser's own zoom instead. Kept in
+   sync with the phone media query in css/app.css. */
+const PHONE_W=700;
+const onPhone=()=>window.matchMedia("(max-width:"+PHONE_W+"px)").matches;
 function applyScale(){
-  const w=pvwrap.clientWidth,sc=Math.min(1,w/FRAME_W),h=lastH+FRAME_SLACK;
+  const h=lastH+FRAME_SLACK;
+  if(onPhone()){
+    /* No transform: scaling to 41% renders body text at ~4.5px. At natural
+       size the page scrolls sideways and pinch-zoom works on real text.
+       Collapsed, the frame keeps its height and the wrap clips it to nothing,
+       so the document still paginates and can report its page count. */
+    frame.style.transform="none";
+    frame.style.height=h+"px";
+    pvwrap.style.height=document.body.classList.contains("pv-open")?"auto":"0px";
+    scaleTag.textContent="100%";
+    return;
+  }
+  const w=pvwrap.clientWidth,sc=Math.min(1,w/FRAME_W);
   frame.style.transform="scale("+sc+")";
   frame.style.height=h+"px";
   pvwrap.style.height=(h*sc)+"px";
@@ -826,6 +853,23 @@ document.getElementById("btnSave").onclick=()=>{const blob=new Blob([JSON.string
 document.getElementById("btnLink").onclick=async ()=>{const link=await shareLink();const done=()=>{const btn=document.getElementById("btnLink");const o=btn.textContent;btn.textContent="Copied ✓";setTimeout(()=>btn.textContent=o,1400);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(link).then(done,()=>prompt("Copy this link:",link));}else prompt("Copy this link:",link);};
 document.getElementById("fileLoad").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const next=normalize(JSON.parse(r.result));markUndo("load file");state=next;renderForm();refreshPreview();saveDraft();}catch(err){alert("Could not read that file: "+err.message);}};r.readAsText(f);e.target.value="";};
 document.getElementById("btnUndo").onclick=doUndo;
+/* Phone only (the button is hidden by CSS above 700px): reveal the pages at
+   natural size, and re-measure since the wrap was display:none until now. */
+document.getElementById("btnPv").onclick=function(){
+  const open=document.body.classList.toggle("pv-open");
+  this.textContent=open?"Hide pages":"View pages";
+  this.setAttribute("aria-expanded",String(open));
+  if(open)applyScale();
+};
+/* Leaves reader mode: dropping the class restores the builder and the rest of
+   the toolbar in one go. */
+document.getElementById("btnEdit").onclick=function(){
+  document.body.classList.remove("from-link");
+  document.body.classList.add("pv-open");
+  const t=document.getElementById("btnPv");
+  if(t){t.textContent="Hide pages";t.setAttribute("aria-expanded","true");}
+  applyScale();
+};
 document.getElementById("themeSel").onchange=function(){state.theme=this.value;refreshPreview();saveDraft();};
 function loadScript(src,integrity){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;if(integrity){s.integrity=integrity;s.crossOrigin="anonymous";}s.onload=res;s.onerror=function(){rej(new Error("load failed"));};document.head.appendChild(s);});}
 /* The only third-party code that runs here, and it runs with full access to the
@@ -927,8 +971,15 @@ document.getElementById("btnPrint").onclick=function(){printDoc(buildDoc(state))
 /* ===== init: URL hash > local draft > sample ===== */
 (async function init(){
   const zh=location.hash.match(/z=([^&]+)/), dh=location.hash.match(/data=([^&]+)/);
-  if(zh){try{state=normalize(JSON.parse(await gunzipToStr(b64ToU8(unb64url(zh[1])))));}catch(e){}}
-  else if(dh){try{state=normalize(decodeState(decodeURIComponent(dh[1])));}catch(e){}}
+  let ok=false;
+  if(zh){try{state=normalize(JSON.parse(await gunzipToStr(b64ToU8(unb64url(zh[1])))));ok=true;}catch(e){}}
+  else if(dh){try{state=normalize(decodeState(decodeURIComponent(dh[1])));ok=true;}catch(e){}}
   else{try{const d=localStorage.getItem("itin-draft-v4");if(d)state=normalize(JSON.parse(d));}catch(e){}}
+  /* Someone arriving on a share link is reading a trip, not writing one. The
+     class only does anything under the phone media query, so a link opened on
+     a desktop still gets the full builder. Only set when the link actually
+     decoded — a corrupt one falls back to the sample, which is not a trip
+     worth reading. */
+  if(ok)document.body.classList.add("from-link","pv-open");
   renderForm();refreshPreview();paintUndo();
 })();
