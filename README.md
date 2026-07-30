@@ -29,11 +29,13 @@ tab won't lose it.
 | **Theme** | Six typographic colour schemes: Classic, Warm, Monochrome, Slate, Forest, Berry |
 | **Load sample** | Replaces everything with the demo trip |
 | **New / blank** | Clears everything (asks first) |
+| **Undo** | Takes back the last delete, or the last action that replaced the whole trip |
 | **Copy link** | A self-contained URL with the whole trip gzipped into the fragment — no server involved |
 | **Save data** | Downloads the trip as JSON |
 | **Load data** | Restores a JSON file |
 | **Print** | Sends the paginated pages to the browser's print dialog |
 | **Export PDF** | Builds a PDF and opens it in a new tab |
+| **Edit this trip** | Phones only, on a shared link — swaps the reading view for the full builder |
 
 ## What you can put in a trip
 
@@ -107,8 +109,26 @@ fragment. The fragment never leaves the browser, so nothing is uploaded
 anywhere. Anyone who opens the link gets the full editable trip.
 
 Links from another person are treated as untrusted input: all fields are HTML
-escaped, and item links are restricted to `http`, `https`, `mailto`, `tel`, and
-`geo` so a `javascript:` URL cannot ride in on someone else's itinerary.
+escaped, item links are restricted to `http`, `https`, `mailto`, `tel`, and
+`geo` so a `javascript:` URL cannot ride in on someone else's itinerary, and
+anything malformed falls back to the sample trip rather than breaking the page.
+
+Opened on a phone, a shared link shows the itinerary rather than the builder —
+whoever you sent it to almost certainly wants to read the trip, not edit it.
+**Edit this trip** brings the full builder back. The same link on a desktop
+opens the builder as normal.
+
+## On a phone
+
+The form is fully usable on a phone: the two panes stack and the fields fill the
+width. The preview is the awkward part, because a page is a fixed sheet of US
+Letter — shrunk to fit a 390px screen it renders 11px print type at about 4.5px,
+which no amount of responsive CSS can rescue.
+
+So below 700px the pages collapse behind a **View pages** toggle and are shown
+at natural size instead of scaled down, which leaves them legible and lets the
+browser's own pinch-zoom work on real text. The page count stays visible while
+they are collapsed.
 
 ---
 
@@ -121,9 +141,10 @@ Two things load from a CDN, both optional:
 - **IBM Plex** (Google Fonts) for typography. Offline, it falls back to
   Helvetica/Arial; pagination still measures correctly because it waits on font
   loading either way.
-- **jsPDF + html2canvas** (cdnjs), fetched on first use of **Export PDF** only.
-  Without a network connection, Export PDF falls back to the print dialog.
-  **Print** never needs the network.
+- **jsPDF + html2canvas** (cdnjs), fetched on first use of **Export PDF** only,
+  and pinned by SRI hash — a tampered or altered response is refused by the
+  browser. Without a network connection, Export PDF falls back to the print
+  dialog. **Print** never needs the network.
 
 ## Project layout
 
@@ -131,6 +152,7 @@ Two things load from a CDN, both optional:
 index.html      markup shell + the print stylesheet held as inert text
 css/app.css     styles for the builder UI (form + preview chrome)
 js/app.js       state, form rendering, pagination, and print/PDF/share plumbing
+favicon.svg     the mark; favicon.ico is the fallback for browsers without SVG
 ```
 
 - `index.html` also carries `#itin-css`, a `<script type="text/plain">` block
