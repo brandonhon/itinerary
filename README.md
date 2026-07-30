@@ -84,10 +84,26 @@ empty field still leaves it empty; nothing is filled in behind your back.
 
 ### Money
 
-Enter costs in whichever currency you paid in. Set an exchange rate per currency
-and the totals convert into your base currency; anything missing a rate is
-flagged rather than silently dropped. Shared costs can optionally be split
-across travelers.
+Enter costs in whichever currency you paid in, and give each traveler a currency
+of their own. Their page then shows every cost converted into it, with what was
+actually paid noted beside the amount — a rideshare booked in HKD reads as
+`$10.00 / paid in HKD` on a traveler set to USD — and the total is in their
+currency. Two travelers can read the same trip in different currencies.
+
+You don't have to set rates by hand. `data/rates.json` ships with the site and
+is refreshed weekly by `.github/workflows/refresh-rates.yml`, so conversions
+work out of the box; the editor shows each reference rate greyed out, with the
+date it came from. Type over one to pin your own — a hand-entered rate always
+wins, which is what you want if you'd rather use the rate your card charged
+than the mid-market one.
+
+A cost with no usable rate keeps its original amount, is left out of the total,
+and the total is marked partial rather than being quietly wrong — which is also
+what happens if the rates file can't be loaded at all. Shared costs can
+optionally be split across travelers.
+
+Rates are reference mid-market figures and are a snapshot, not live: fine for
+budgeting a trip, not for reconciling a statement.
 
 ---
 
@@ -183,10 +199,10 @@ index.html      markup shell + the print stylesheet held as inert text
 css/app.css     styles for the builder UI (form + preview chrome)
 js/app.js       state, form rendering, pagination, and print/PDF/share plumbing
 favicon.svg     the mark; favicon.ico is the fallback for browsers without SVG
-data/           airport and airline lookup tables (generated, committed)
-scripts/        build-data.mjs, regenerates data/ (build-time only)
+data/           airport, airline and exchange-rate tables (generated, committed)
+scripts/        build-data.mjs and build-rates.mjs, regenerate data/
 package.json    the one build-time dependency; the site itself uses none
-.github/        workflow that refreshes data/ twice a year
+.github/        workflows that refresh data/ — airports twice a year, rates weekly
 ```
 
 - `index.html` also carries `#itin-css`, a `<script type="text/plain">` block
@@ -229,7 +245,8 @@ npm install && node scripts/build-data.mjs
 That is the only thing in this repo with a dependency, and it is build-time
 only — the published site is still plain HTML, CSS and JavaScript.
 
-`.github/workflows/refresh-airport-data.yml` does this on 1 January and 1 July.
+`.github/workflows/refresh-airport-data.yml` does this on 1 January and 1 July,
+and a separate weekly job refreshes the exchange rates.
 It is worth running: new airports open, and daylight-saving rule changes are
 handled by the browser's own timezone database rather than by these files. A
 stale table means a prefill doesn't happen, never a wrong itinerary.

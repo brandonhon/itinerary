@@ -1,0 +1,45 @@
+name: Refresh exchange rates
+
+# Weekly. Rates move enough that a stale table would misprice a trip, but not
+# so fast that an itinerary estimate needs them daily — and a weekly commit is
+# also enough repository activity to keep the schedule from being disabled.
+#
+# NOTE: GitHub disables scheduled workflows in a repository with no activity for
+# 60 days. If rates stop updating, check the Actions tab for a disabled-workflow
+# notice; workflow_dispatch below runs it by hand meanwhile.
+on:
+  schedule:
+    - cron: "0 6 * * 1"       # 06:00 UTC every Monday
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # The script refuses to write a partial table: a currency the source has
+      # no rate for fails the job rather than shipping a file that would
+      # silently drop those costs out of every total.
+      - name: Rebuild rates
+        run: node scripts/build-rates.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/rates.json; then
+            echo "Rates unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/rates.json
+          git commit -m "data: refresh exchange rates"
+          git push
+          echo "Pushed refreshed rates."

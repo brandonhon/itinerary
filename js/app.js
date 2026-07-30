@@ -295,12 +295,84 @@ function statList(list){const out=[];const n=totalNights(list);if(n)out.push({v:
 function primaryWhen(e){if(e.type==="flight")return toEpoch(e.departDate,e.departTime);if(e.type==="hotel")return toEpoch(e.checkIn,"15:00");if(e.type==="car")return toEpoch(e.pickupDate,e.pickupTime);return toEpoch(e.date,e.time);}
 function labelFor(e){if(e.type==="flight")return (e.carrier||"Air")+(e.originCode&&e.destCode?" "+e.originCode+"–"+e.destCode:"");if(e.type==="hotel")return e.name||"Hotel";if(e.type==="car")return "Rental"+(e.company?" · "+e.company:"");if(e.type==="ground")return (own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.to?" · "+e.to:"");if(e.type==="transport")return (e.mode||"Transport")+(e.to?" · "+e.to:"");return e.name||(own(TYPES,e.type)?TYPES[e.type].label:"")||"Item";}
 
-function toBase(cur,amt){const base=state.baseCurrency||"USD";if(cur===base)return amt;const r=state.rates&&state.rates[cur];const rn=parseFloat(r);if(!rn||isNaN(rn))return null;return amt/rn;}
-function costData(list){const base=state.baseCurrency||"USD",np=people().length,split=!!state.splitShared&&np>1;const rows=[],totals={};let baseSum=0,missing=false;
-  list.forEach(e=>{let c=num(e.cost);if(c<=0)return;const cur=e.currency||"USD";let disp=c,note="";if(split&&isShared(e)){disp=c/np;note=" (1/"+np+")";}rows.push({label:labelFor(e)+note,cur,amount:money(cur,disp)});totals[cur]=(totals[cur]||0)+disp;const b=toBase(cur,disp);if(b==null)missing=true;else baseSum+=b;});
-  return {rows,tot:Object.keys(totals).map(cur=>({cur,amount:money(cur,totals[cur])})),base,baseSum,missing,any:rows.length>0};}
-function tripCost(){const base=state.baseCurrency||"USD",totals={};let baseSum=0,missing=false;ents().forEach(e=>{const c=num(e.cost);if(c<=0)return;const cur=e.currency||"USD";totals[cur]=(totals[cur]||0)+c;const b=toBase(cur,c);if(b==null)missing=true;else baseSum+=b;});return {tot:Object.keys(totals).map(cur=>({cur,amount:money(cur,totals[cur])})),base,baseSum,missing};}
-
+/* Reference rates, vendored under data/ and refreshed weekly by CI, so the page
+   still talks to no third party while it runs. Loaded once, in the background:
+   the document renders immediately on whatever rates are already known and
+   re-renders if the table arrives with something new to say. */
+let FX=null,FXP=null;
+function loadRates(){
+  if(!FXP)FXP=fetch("data/rates.json").then(r=>r.ok?r.json():null).catch(()=>null)
+    .then(j=>{FX=(j&&j.rates&&typeof j.rates==="object")?j:null;return FX;});
+  return FXP;
+}
+/* Stored against USD; the base here is whatever the user picked, so re-base:
+   rate(base -> cur) = usd[cur] / usd[base]. */
+function autoRate(cur){
+  if(!FX)return null;
+  const base=state.baseCurrency||"USD";
+  const a=FX.rates[cur],b=FX.rates[base];
+  if(!a||!b||!isFinite(a)||!isFinite(b))return null;
+  return a/b;
+}
+/* A hand-entered rate always wins — the reference table is a default, not an
+   override, so a trip priced at the rate a card actually charged keeps it. */
+function rateFor(cur){
+  const manual=parseFloat(state.rates&&state.rates[cur]);
+  if(manual&&!isNaN(manual))return manual;
+  return autoRate(cur);
+}
+function toBase(cur,amt){const base=state.baseCurrency||"USD";if(cur===base)return amt;const rn=rateFor(cur);if(!rn)return null;return amt/rn;}
+/* Rates are held as "1 base = N foreign", so any pair converts through the
+   base: into it by dividing, out of it by multiplying. null means a rate is
+   missing — the caller shows the original amount rather than inventing one. */
+function convert(amt,from,to){
+  if(from===to)return amt;
+  const base=toBase(from,amt);
+  if(base==null)return null;
+  const target=state.baseCurrency||"USD";
+  if(to===target)return base;
+  const rn=rateFor(to);
+  if(!rn)return null;
+  return base*rn;
+}
+function personCur(p){const c=p&&p.currency;return (c&&CURRENCIES.indexOf(c)>-1)?c:(state.baseCurrency||"USD");}
+/* Every row is shown in the traveler's own currency, with what they actually
+   paid noted beside it. A row whose rate is missing keeps its original amount
+   and is left out of the total, which is then flagged rather than quietly
+   wrong. */
+function costData(list,dispCur){
+  const disp=dispCur||state.baseCurrency||"USD";
+  const np=people().length,split=!!state.splitShared&&np>1;
+  const rows=[];let sum=0,missing=false;
+  list.forEach(e=>{
+    const c=num(e.cost);
+    if(c<=0)return;
+    const cur=e.currency||"USD";
+    let amt=c,note="";
+    if(split&&isShared(e)){amt=c/np;note=" (1/"+np+")";}
+    const conv=convert(amt,cur,disp);
+    if(conv==null){
+      missing=true;
+      rows.push({label:labelFor(e)+note,sub:cur,amount:money(cur,amt)});
+    }else{
+      sum+=conv;
+      rows.push({label:labelFor(e)+note,sub:cur===disp?"":"paid in "+cur,amount:money(disp,conv)});
+    }
+  });
+  return {rows,disp,sum,missing,any:rows.length>0};
+}
+function tripCost(){
+  const disp=state.baseCurrency||"USD";
+  let sum=0,missing=false,any=false;
+  ents().forEach(e=>{
+    const c=num(e.cost);
+    if(c<=0)return;
+    any=true;
+    const conv=convert(c,e.currency||"USD",disp);
+    if(conv==null)missing=true;else sum+=conv;
+  });
+  return {rows:null,disp,sum,missing,any};
+}
 function tsmall(code,time,zone){const t=time?(time+(zone?" "+zone:"")):"";return [code,t].filter(Boolean).join(" · ");}
 function nodesFor(e,id){
   const L=(lead,leadText,text,mono,alt)=>({lead,leadText,text,mono:!!mono,alt:!!alt});
@@ -364,12 +436,18 @@ function railChecklist(s){
   }).join("\n\n      ")+'\n\n      ';
 }
 function railReference(s){const ref=(s.emergency||[]).filter(x=>x&&(x.label||x.value));if(!ref.length)return "";return '<h2>Reference</h2>\n      '+ref.map(x=>'<div class="rec"><div class="rec-s">'+esc(x.label)+'</div><div class="rec-t">'+esc(x.value)+'</div></div>').join("\n      ")+'\n\n      ';}
-function costTable(cd,heading){if(!cd.any&&!(cd.tot&&cd.tot.length))return "";let t='<h2>'+esc(heading)+'</h2>\n      <table class="cost">\n        ';if(cd.rows)t+=cd.rows.map(r=>'<tr><td>'+esc(r.label)+'<span class="sub">'+esc(r.cur)+'</span></td><td>'+esc(r.amount)+'</td></tr>').join("\n        ");
-  if(cd.tot.length===1&&cd.tot[0].cur===cd.base){t+='\n        <tr class="tot"><td>Total · '+esc(cd.base)+'</td><td>'+esc(cd.tot[0].amount)+'</td></tr>';}
-  else{cd.tot.forEach(tt=>{t+='\n        <tr><td>Subtotal · '+esc(tt.cur)+'</td><td>'+esc(tt.amount)+'</td></tr>';});t+='\n        <tr class="tot"><td>Total · '+esc(cd.base)+(cd.missing?' *':'')+'</td><td>≈ '+esc(money(cd.base,cd.baseSum))+'</td></tr>';}
-  t+='\n      </table>';if(cd.missing)t+='\n      <p style="font-family:var(--mono);font-size:8px;color:var(--faint);letter-spacing:.03em;margin-top:5px;line-height:1.4">* Some currencies have no exchange rate set; total is partial.</p>';return t+'\n\n      ';}
-
-function buildSheet(s,list,eyebrowText,home){
+function costTable(cd,heading){
+  if(!cd.any)return "";
+  let t='<h2>'+esc(heading)+'</h2>\n      <table class="cost">\n        ';
+  if(cd.rows)t+=cd.rows.map(r=>'<tr><td>'+esc(r.label)+
+    (r.sub?'<span class="sub">'+esc(r.sub)+'</span>':'')+'</td><td>'+esc(r.amount)+'</td></tr>').join("\n        ");
+  t+='\n        <tr class="tot"><td>Total · '+esc(cd.disp)+(cd.missing?' *':'')+'</td><td>'+
+    esc(money(cd.disp,cd.sum))+'</td></tr>';
+  t+='\n      </table>';
+  if(cd.missing)t+='\n      <p style="font-family:var(--mono);font-size:8px;color:var(--faint);letter-spacing:.03em;margin-top:5px;line-height:1.4">* No exchange rate set for every currency; the total covers only what could be converted.</p>';
+  return t+'\n\n      ';
+}
+function buildSheet(s,list,eyebrowText,home,dispCur){
   curHome=home||{};
   list=list.filter(hasContent);      /* one place, so stats and route agree */
   const mt=mastTitles(s),dr=dateRangeStr(),rl=routeLine(list);
@@ -378,7 +456,7 @@ function buildSheet(s,list,eyebrowText,home){
   const confs=confList(list);
   let rail="";
   if(confs.length)rail+='<h2>Confirmations</h2>\n      '+confs.map(c=>'<div class="rec"><div class="rec-s">'+esc(c.sub)+'</div><div class="rec-v">'+esc(c.val)+'</div><div class="rec-c">'+esc(c.cap)+'</div></div>').join("\n      ")+'\n\n      ';
-  if(s.showCosts){const cd=costData(list);if(cd.any)rail+=costTable(cd,"Booked cost");}
+  if(s.showCosts){const cd=costData(list,dispCur);if(cd.any)rail+=costTable(cd,"Booked cost");}
   rail+=railChecklist(s)+railReference(s);
   const ft=s.footer||["","",""];
   const foot='<footer><span>'+esc(ft[0]||"")+'</span><span>'+esc(ft[1]||"")+'</span><span>'+esc(ft[2]||"")+'</span></footer>';
@@ -392,13 +470,13 @@ function buildCover(s){
   const mastR='<div class="mast-r">'+(dr?'<div class="daterange">'+esc(dr)+'</div>':'')+'<div class="mast-meta">'+ppl.length+' travelers</div></div>';
   const main='<main>\n      <h2>Shared plan</h2>\n      <div class="spine">\n      '+renderSpine(journeyNodes(sharedList),s.dayGrouped)+'\n      </div>\n    </main>';
   let rail='<h2>Travelers</h2>\n      '+ppl.map((p,idx)=>{const list=listFor(idx);const rl=routeLine(list);const st=statList(list).filter(x=>x.l==="Outbound"||x.l==="Return").map(x=>x.l+" "+x.v).join(" · ");return '<div class="rec"><div class="rec-s">'+esc(p.name||("Traveler "+(idx+1)))+'</div><div class="rec-t">'+esc(rl||"—")+'</div><div class="rec-c">'+esc(st)+'</div></div>';}).join("\n      ")+'\n\n      ';
-  if(s.showCosts){const tc=tripCost();if(tc.tot.length)rail+=costTable({rows:null,tot:tc.tot,base:tc.base,baseSum:tc.baseSum,missing:tc.missing,any:true},"Trip cost");}
+  if(s.showCosts){const tc=tripCost();if(tc.any)rail+=costTable(tc,"Trip cost");}
   rail+=railChecklist(s)+railReference(s);
   const ft=s.footer||["","",""];
   const foot='<footer><span>'+esc(ft[0]||"")+'</span><span>'+esc(ft[1]||"")+'</span><span>Overview</span></footer>';
   return '<section class="sheet" data-run="'+esc(mt.plain)+'" data-runmeta="'+esc(s.eyebrow+" · Overview")+'">\n\n  <div class="mast"><div><div class="eyebrow">'+esc(s.eyebrow+" · Overview")+'</div><h1 style="font-size:'+mt.fs+'px">'+mt.html+'</h1></div>'+mastR+'</div>\n\n  '+statStrip(stats)+'\n\n  <div class="cols">\n\n    '+main+'\n\n    <aside class="rail">\n\n      '+rail+'\n\n    </aside>\n  </div>\n\n  '+foot+'\n\n</section>';
 }
-function buildBody(s){const ppl=people(),mm=ppl.length>1;let sheets=[];if(mm&&s.showSummaryPage)sheets.push(buildCover(s));ppl.forEach((p,idx)=>{const list=mm?listFor(idx):ents();const eb=s.eyebrow+(p.name?" · "+p.name:"");sheets.push(buildSheet(s,list,eb,{tz:p.homeTz,off:p.homeOff,label:p.homeLabel}));});return sheets.join("\n\n");}
+function buildBody(s){const ppl=people(),mm=ppl.length>1;let sheets=[];if(mm&&s.showSummaryPage)sheets.push(buildCover(s));ppl.forEach((p,idx)=>{const list=mm?listFor(idx):ents();const eb=s.eyebrow+(p.name?" · "+p.name:"");sheets.push(buildSheet(s,list,eb,{tz:p.homeTz,off:p.homeOff,label:p.homeLabel},personCur(p)));});return sheets.join("\n\n");}
 
 /* ═══════ paginator ═══════════════════════════════════════════
    Injected into, and executed inside, the generated document —
@@ -579,7 +657,7 @@ function wrapDoc(bodyHtml,titleText){const css=document.getElementById("itin-css
   return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>var ITIN_ORIGIN='+JSON.stringify(postTarget())+';\n'+PAGINATOR+'<\/script>\n</body>\n</html>';}
 function docTitle(){const t=(state.titles||[]).filter(x=>x&&x.trim()).join(" & ");return t+(dateRangeStr()?" — "+dateRangeStr():"");}
 function buildDoc(s){return wrapDoc(buildBody(s),docTitle());}
-function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{tz:ppl[idx].homeTz,off:ppl[idx].homeOff,label:ppl[idx].homeLabel}),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
+function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{tz:ppl[idx].homeTz,off:ppl[idx].homeOff,label:ppl[idx].homeLabel},personCur(ppl[idx])),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
 
 /* ===== preview ===== */
 const frame=document.getElementById("frame"),pvwrap=document.getElementById("pvwrap"),
@@ -765,14 +843,23 @@ function summaryHTML(){const ppl=people(),mm=ppl.length>1;let h='<div class="row
 
 function ratesEditor(){const base=state.baseCurrency||"USD";/* Only known currencies get a rate row: the code goes into a data-path, and
    trip data from a share link can put anything in e.currency. */
-  const used=[...new Set(ents().map(e=>e.currency||"USD"))].filter(c=>c&&c!==base&&CURRENCIES.indexOf(c)>-1);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" aria-label="'+esc(cur+" per "+base)+'" value="'+esc(v)+'" placeholder="rate"><span class="rsuf">'+esc(cur)+'</span></div>';});return h;}
+  /* A traveler's own currency needs a rate as much as a currency spent in:
+     without it nothing can be converted into their column. */
+  const wanted=ents().map(e=>e.currency||"USD").concat(people().map(personCur));
+  const used=[...new Set(wanted)].filter(c=>c&&c!==base&&CURRENCIES.indexOf(c)>-1);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";const auto=autoRate(cur);
+    h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" aria-label="'+esc(cur+" per "+base)+'" value="'+esc(v)+'" placeholder="'+esc(auto?String(Number(auto.toPrecision(6))):"rate")+'"><span class="rsuf">'+esc(cur)+'</span></div>';});
+  h+=FX
+    ?'<div class="hint">Reference rates from '+esc(FX.date)+', refreshed weekly — shown greyed and used automatically. Type over one to pin your own.</div>'
+    :'<div class="hint">Reference rates could not be loaded; enter rates by hand.</div>';
+  return h;}
 
 function renderForm(){
   const s=state;let h="";
   h+='<div class="sec"><h2>Header</h2><div class="sbody">';
   h+=fld("Eyebrow",inp("eyebrow",s.eyebrow,"Travel Itinerary"),true);
   h+='<div class="sub-h">Travelers</div>';
-  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name",false,"Traveler "+(i+1)+" name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+'</div>';});
+  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name",false,"Traveler "+(i+1)+" name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+
+      '<div class="grid">'+fld("Their currency",sel("people."+i+".currency",personCur(p),CURRENCIES))+'<div></div></div>'+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="person-add">+ Add traveler</button></div>';
   h+='<div class="hint">Zones that shift for daylight saving list both offsets, January first. The itinerary works out which one applies on each date.</div>';
   if(people().length>1)h+='<div class="hint">Each traveler gets its own page. Assign flights (and anything else that differs) to a traveler; leave shared items on “Both / all.”</div>';
@@ -1342,4 +1429,6 @@ document.getElementById("btnPrint").onclick=function(){printDoc(buildDoc(state))
      worth reading. */
   if(ok)document.body.classList.add("from-link","pv-open");
   renderForm();refreshPreview();paintUndo();
+  /* Not awaited: a slow or missing file must not hold up first paint. */
+  loadRates().then(fx=>{if(fx){updateRates();updateSummary();refreshPreview();}});
 })();
