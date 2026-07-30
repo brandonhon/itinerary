@@ -34,7 +34,7 @@ function fmtRange(a,b){const [ay,am,ad]=parseISO(a),[by,bm,bd]=parseISO(b);if(!a
 function epUTC(iso,tm,off){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y)return null;let hh=0,mm=0;if(tm){const t=tm.split(":");hh=+t[0]||0;mm=+t[1]||0;}let ms=Date.UTC(y,m-1,d,hh,mm);if(off!==""&&off!=null&&!isNaN(+off))ms-=(+off)*60000;return ms;}
 function elapsedStr(f){const a=epUTC(f.departDate,f.departTime,f.departOff),b=epUTC(f.arriveDate,f.arriveTime,f.arriveOff);if(a==null||b==null)return "";let mins=Math.round((b-a)/60000);if(mins<0)return "";const approx=(f.departOff===""||f.arriveOff===""||f.departOff==null||f.arriveOff==null);const h=Math.floor(mins/60),mm=mins%60;return (approx?"~":"")+h+"h "+String(mm).padStart(2,"0")+"m";}
 function num(x){const n=parseFloat(String(x==null?"":x).replace(/[, ]/g,""));return isNaN(n)?0:n;}
-function money(cur,n){const s=SYM[cur]||(cur?cur+" ":"");const dec=(cur==="JPY"||cur==="KRW")?0:2;return s+Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});}
+function money(cur,n){const s=own(SYM,cur)?SYM[cur]:(cur?cur+" ":"");const dec=(cur==="JPY"||cur==="KRW")?0:2;return s+Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});}
 function arrowize(s){return String(s||"").split(/\s*(?:,|→|->)\s*/).map(x=>x.trim()).filter(Boolean).join(" → ");}
 function homeLine(dateIso,timeStr,off){const hm=curHome||{};if(hm.off===""||hm.off==null)return null;if(off===""||off==null)return null;if(String(off)===String(hm.off))return null;const utc=epUTC(dateIso,timeStr,off);if(utc==null)return null;const t=utc+(+hm.off)*60000;const d=new Date(t);const p=n=>String(n).padStart(2,"0");return WD[d.getUTCDay()]+" "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())+(hm.label?" "+hm.label:"");}
 
@@ -89,7 +89,14 @@ function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripS
 let state=SAMPLE();
 let curHome={};
 
+/* Single quotes are deliberately not escaped: every attribute emitted by this
+   file is double-quoted. If you add one, quote it with " or extend esc(). */
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+/* Lookup keys (theme, currency, item type, ground mode) come from trip data a
+   share link controls, so a plain obj[key] can hit an inherited member —
+   TYPES["constructor"] is truthy and SYM["constructor"] stringifies a whole
+   function into the totals. Every table lookup goes through this. */
+function own(o,k){return Object.prototype.hasOwnProperty.call(o,k);}
 /* Trip data can arrive from a share link someone else built, so a raw
    href would let `javascript:` run on click. Allow navigable schemes
    only; bare hostnames are promoted to https. Anything else is dropped. */
@@ -103,14 +110,18 @@ function safeUrl(u){
 }
 function inl(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");}
 function slug(s){return String(s||"itinerary").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50)||"itinerary";}
-function setPath(root,path,val){const p=path.split(".");let o=root;for(let i=0;i<p.length-1;i++){let k=p[i];if(/^\d+$/.test(k))k=+k;if(o[k]==null)o[k]={};o=o[k];}let last=p[p.length-1];if(/^\d+$/.test(last))last=+last;o[last]=val;}
+/* One data-path is derived from trip data (the per-currency rate inputs), so a
+   crafted currency could otherwise steer this walk into Object.prototype. */
+const BADKEY=/^(?:__proto__|prototype|constructor)$/;
+function setPath(root,path,val){const p=path.split(".");if(p.some(k=>BADKEY.test(k)))return;let o=root;for(let i=0;i<p.length-1;i++){let k=p[i];if(/^\d+$/.test(k))k=+k;if(o[k]==null)o[k]={};o=o[k];}let last=p[p.length-1];if(/^\d+$/.test(last))last=+last;o[last]=val;}
 function move(arr,i,d){const j=i+d;if(j<0||j>=arr.length)return;const t=arr[i];arr[i]=arr[j];arr[j]=t;}
 
 /* ===== derivations ===== */
 function ents(){return state.entities||[];}
 function people(){return (state.people&&state.people.length)?state.people:[{name:""}];}
 function multi(){return people().length>1;}
-function palette(){return (THEMES[state.theme]||THEMES.classic).palette;}
+function themeDef(){return own(THEMES,state.theme)?THEMES[state.theme]:THEMES.classic;}
+function palette(){return themeDef().palette;}
 /* US Letter portrait, fixed: 8.5x11in = 612x792pt = 816x1056 css px. */
 const PAGE_WPT=612,PAGE_HPT=792,PAGE_PXH=1056;
 function isShared(e){return e.owner==null||e.owner==="shared";}
@@ -123,7 +134,7 @@ function routeLine(list){const f=firstFlight(list);if(!f||!f.originCode||!f.dest
 function dateRangeStr(){const a=state.tripStart,b=state.tripEnd;if(!a&&!b)return "";if(a&&!b)return fmtLong(a);if(!a&&b)return fmtLong(b);return fmtRange(a,b);}
 function statList(list){const out=[];const n=totalNights(list);if(n)out.push({v:String(n),l:"Nights"});const h=list.filter(e=>e.type==="hotel").length;if(h)out.push({v:String(h),l:h===1?"Hotel":"Hotels"});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const e=elapsedStr(ff);if(e)out.push({v:e,l:"Outbound"});}if(lf&&lf!==ff){const e=elapsedStr(lf);if(e)out.push({v:e,l:"Return"});}return out;}
 function primaryWhen(e){if(e.type==="flight")return toEpoch(e.departDate,e.departTime);if(e.type==="hotel")return toEpoch(e.checkIn,"15:00");if(e.type==="car")return toEpoch(e.pickupDate,e.pickupTime);return toEpoch(e.date,e.time);}
-function labelFor(e){if(e.type==="flight")return (e.carrier||"Air")+(e.originCode&&e.destCode?" "+e.originCode+"–"+e.destCode:"");if(e.type==="hotel")return e.name||"Hotel";if(e.type==="car")return "Rental"+(e.company?" · "+e.company:"");if(e.type==="ground")return (MODE[e.mode]||"Transfer")+(e.to?" · "+e.to:"");if(e.type==="transport")return (e.mode||"Transport")+(e.to?" · "+e.to:"");return e.name||(TYPES[e.type]||{}).label||"Item";}
+function labelFor(e){if(e.type==="flight")return (e.carrier||"Air")+(e.originCode&&e.destCode?" "+e.originCode+"–"+e.destCode:"");if(e.type==="hotel")return e.name||"Hotel";if(e.type==="car")return "Rental"+(e.company?" · "+e.company:"");if(e.type==="ground")return (own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.to?" · "+e.to:"");if(e.type==="transport")return (e.mode||"Transport")+(e.to?" · "+e.to:"");return e.name||(own(TYPES,e.type)?TYPES[e.type].label:"")||"Item";}
 
 function toBase(cur,amt){const base=state.baseCurrency||"USD";if(cur===base)return amt;const r=state.rates&&state.rates[cur];const rn=parseFloat(r);if(!rn||isNaN(rn))return null;return amt/rn;}
 function costData(list){const base=state.baseCurrency||"USD",np=people().length,split=!!state.splitShared&&np>1;const rows=[],totals={};let baseSum=0,missing=false;
@@ -146,7 +157,7 @@ function nodesFor(e,id){
   }
   if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);const node={id:id,when:toEpoch(e.checkIn,"15:00"),stamp:(dayNum(e.checkIn)&&dayNum(e.checkOut))?dayNum(e.checkIn)+" – "+dayNum(e.checkOut):fmtStamp(e.checkIn),title:e.name||"Hotel",titleSmall:[nt?nt+(nt===1?" night":" nights"):"",e.area].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.address)node.lines.push(L("none","",e.address));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="car"){const node={id:id,when:toEpoch(e.pickupDate,e.pickupTime),stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:e.pickupTime||"",nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",e.dropoffTime].filter(Boolean).join(" · ")));if(e.note)node.lines.push(L("none","",e.note));return [node];}
-  if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",MODE[e.mode]||"Taxi",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
+  if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
   if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="transport"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",e.mode||"Transport",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
@@ -156,7 +167,7 @@ function nodesFor(e,id){
   const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("badge","Route",e.note));return [node];
 }
 function journeyNodes(list){let nodes=[];list.forEach((e,i)=>{nodesFor(e,"n"+i).forEach((n,k)=>{n._ord=i*10+k;nodes.push(n);});});nodes.sort((a,b)=>{const wa=a.when??Infinity,wb=b.when??Infinity;return wa-wb||a._ord-b._ord;});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===ff&&n.meta.end==="dep");if(idx>0){const [x]=nodes.splice(idx,1);nodes.unshift(x);}}if(lf){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===lf&&n.meta.end==="arr");if(idx>-1&&idx<nodes.length-1){const [x]=nodes.splice(idx,1);nodes.push(x);}}const pal=palette();nodes.forEach((n,i)=>{n.color=pal[i%pal.length];});return nodes;}
-function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(MODE[e.mode]||"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}
+function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}
 
 /* ===== output ===== */
 function titleFont(len){if(len<=14)return 34;if(len<=20)return 29;if(len<=28)return 24;if(len<=38)return 20;if(len<=52)return 17;return 15;}
@@ -353,7 +364,9 @@ function go(){
   try{n=paginate();}
   catch(e){root.classList.remove("paginating");n=D.querySelectorAll(".sheet").length;}
   root.setAttribute("data-paginated","1");
-  try{parent.postMessage({itin:"paginated",pages:n,over:OVERSIZE,height:contentHeight()},"*");}catch(e){}
+  /* ITIN_ORIGIN is stamped in by wrapDoc so the report goes to the builder and
+     nowhere else — this frame is sandboxed and cannot read it for itself. */
+  try{parent.postMessage({itin:"paginated",pages:n,over:OVERSIZE,height:contentHeight()},ITIN_ORIGIN);}catch(e){}
 }
 var fired=false;
 function once(){if(fired)return;fired=true;requestAnimationFrame(go);}
@@ -361,12 +374,15 @@ setTimeout(once,3000);                             /* fonts.ready can hang offli
 if(D.fonts&&D.fonts.ready)D.fonts.ready.then(once,once);else once();
 })();`;
 
-function extraCss(){const th=THEMES[state.theme]||THEMES.classic;const varOv=Object.keys(th.vars).length?':root{'+Object.keys(th.vars).map(k=>k+":"+th.vars[k]).join(";")+'}':'';
+function extraCss(){const th=themeDef();const varOv=Object.keys(th.vars).length?':root{'+Object.keys(th.vars).map(k=>k+":"+th.vars[k]).join(";")+'}':'';
   const dh='.dayhead{margin:6px 0 11px -26px;padding-bottom:5px;border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:9px}.dayhead .dn{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}.dayhead .dd{font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.01em}.leg+.dayhead{margin-top:14px}';
   const page='html[data-print] .page{box-shadow:none;margin:0}';
   return '<style>'+varOv+dh+page+'</style>';}
+/* Opened from file://, location.origin is "null" and no targetOrigin can match,
+   so fall back to "*" there. The payload is a page count and a height. */
+function postTarget(){const o=location.origin;return (o&&o!=="null")?o:"*";}
 function wrapDoc(bodyHtml,titleText){const css=document.getElementById("itin-css").textContent;
-  return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>'+PAGINATOR+'<\/script>\n</body>\n</html>';}
+  return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>var ITIN_ORIGIN='+JSON.stringify(postTarget())+';\n'+PAGINATOR+'<\/script>\n</body>\n</html>';}
 function docTitle(){const t=(state.titles||[]).filter(x=>x&&x.trim()).join(" & ");return t+(dateRangeStr()?" — "+dateRangeStr():"");}
 function buildDoc(s){return wrapDoc(buildBody(s),docTitle());}
 function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{off:ppl[idx].homeOff,label:ppl[idx].homeLabel}),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
@@ -393,7 +409,10 @@ function applyScale(){
   scaleTag.textContent=Math.round(sc*100)+"%";
 }
 /* Pre-pagination estimate only; the paginator's report supersedes it.
-   Measures body, not documentElement, for the same reason contentHeight() does. */
+   Measures body, not documentElement, for the same reason contentHeight() does.
+   The preview frame is sandboxed into its own origin, so contentDocument reads
+   as null there and this contributes nothing — the postMessage height is what
+   drives the preview. It still helps on any non-sandboxed frame. */
 function measureFrame(){try{const b=frame.contentDocument&&frame.contentDocument.body;if(b)lastH=Math.ceil(b.getBoundingClientRect().height)||lastH;}catch(e){}applyScale();}
 
 /* The document paginates itself and reports back; every consumer
@@ -437,7 +456,7 @@ function ownerOpts(){return [["shared","Both / all travelers"]].concat(people().
 
 function tail(e,i){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
 function entityCard(e,i){
-  const p="entities."+i,tm=TYPES[e.type]||{label:e.type,c:"#666"};
+  const p="entities."+i,tm=own(TYPES,e.type)?TYPES[e.type]:{label:e.type,c:"#666"};
   let h='<div class="card" style="border-left-color:'+tm.c+'"><div class="card-h"><span class="tag" style="background:'+tm.c+'">'+esc(tm.label)+'</span><span class="sp"></span>'+ibtn("ent-del",i,"✕","del")+'</div>';
   if(multi())h+=fld("Traveler",sel(p+".owner",e.owner||"shared",ownerOpts()),true);
   if(e.type==="flight"){
@@ -475,7 +494,9 @@ function entityCard(e,i){
 
 function summaryHTML(){const ppl=people(),mm=ppl.length>1;let h='<div class="row"><span class="kk">Dates</span><span class="vv">'+(esc(dateRangeStr())||"—")+'</span></div>';ppl.forEach((p,idx)=>{const list=listFor(idx);const rl=routeLine(list),stats=statList(list);h+='<div class="row"><span class="kk">'+(mm?esc(p.name||("Traveler "+(idx+1))):"Route")+'</span><span class="vv">'+(esc(rl)||"—")+'</span></div>';h+='<div class="row"><span class="kk">Stats</span><span class="vv"><span class="chips">'+(stats.length?stats.map(x=>'<span class="chip">'+esc(x.v)+' '+esc(x.l)+'</span>').join(""):"—")+'</span></span></div>';});return h;}
 
-function ratesEditor(){const base=state.baseCurrency||"USD";const used=[...new Set(ents().map(e=>e.currency||"USD"))].filter(c=>c&&c!==base);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" value="'+esc(v)+'" placeholder="rate"><span class="rsuf">'+esc(cur)+'</span></div>';});return h;}
+function ratesEditor(){const base=state.baseCurrency||"USD";/* Only known currencies get a rate row: the code goes into a data-path, and
+   trip data from a share link can put anything in e.currency. */
+  const used=[...new Set(ents().map(e=>e.currency||"USD"))].filter(c=>c&&c!==base&&CURRENCIES.indexOf(c)>-1);if(!used.length)return '<div class="hint">Add items with costs in other currencies to set exchange rates here.</div>';let h="";used.forEach(cur=>{const v=(state.rates&&state.rates[cur]!=null)?state.rates[cur]:"";h+='<div class="grid rate"><span class="rlabel">1 '+esc(base)+' =</span><input class="f mono" data-path="rates.'+esc(cur)+'" value="'+esc(v)+'" placeholder="rate"><span class="rsuf">'+esc(cur)+'</span></div>';});return h;}
 
 function renderForm(){
   const s=state;let h="";
@@ -588,7 +609,22 @@ function b64ToU8(b64){const s=atob(b64);const u=new Uint8Array(s.length);for(let
 function b64url(b){return b.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
 function unb64url(s){s=s.replace(/-/g,"+").replace(/_/g,"/");while(s.length%4)s+="=";return s;}
 async function gzipStr(str){const cs=new CompressionStream("gzip");const w=cs.writable.getWriter();w.write(new TextEncoder().encode(str));w.close();const ab=await new Response(cs.readable).arrayBuffer();return new Uint8Array(ab);}
-async function gunzipToStr(u8){const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(u8);w.close();const ab=await new Response(ds.readable).arrayBuffer();return new TextDecoder().decode(ab);}
+/* A few hundred bytes of gzip can expand to hundreds of megabytes, so read the
+   stream in chunks and give up rather than letting a link hang the tab. Well
+   clear of a real trip, which is a few tens of KB of JSON. */
+const MAX_UNZIP=4*1024*1024;
+async function gunzipToStr(u8){
+  const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(u8);w.close();
+  const rd=ds.readable.getReader();const parts=[];let n=0;
+  for(;;){
+    const {value,done}=await rd.read();
+    if(done)break;
+    n+=value.length;
+    if(n>MAX_UNZIP){rd.cancel();throw new Error("shared trip is too large");}
+    parts.push(value);
+  }
+  return new TextDecoder().decode(await new Blob(parts).arrayBuffer());
+}
 async function shareLink(){const base=location.href.split("#")[0];const json=JSON.stringify(state);if(typeof CompressionStream!=="undefined"){try{const gz=await gzipStr(json);return base+"#z="+b64url(u8ToB64(gz));}catch(e){}}return base+"#data="+encodeURIComponent(encodeState());}
 function normalize(st){const b=BLANK();const o=Object.assign(b,st);if(!o.titles||!o.titles.length)o.titles=["Destination"];if(!o.people||!o.people.length)o.people=[{name:""}];if(!o.footer||o.footer.length<3)o.footer=(o.footer||[]).concat(["","",""]).slice(0,3);o.entities=o.entities||[];return o;}
 
@@ -599,14 +635,25 @@ document.getElementById("btnSave").onclick=()=>{const blob=new Blob([JSON.string
 document.getElementById("btnLink").onclick=async ()=>{const link=await shareLink();const done=()=>{const btn=document.getElementById("btnLink");const o=btn.textContent;btn.textContent="Copied ✓";setTimeout(()=>btn.textContent=o,1400);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(link).then(done,()=>prompt("Copy this link:",link));}else prompt("Copy this link:",link);};
 document.getElementById("fileLoad").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{state=normalize(JSON.parse(r.result));renderForm();refreshPreview();saveDraft();}catch(err){alert("Could not read that file: "+err.message);}};r.readAsText(f);e.target.value="";};
 document.getElementById("themeSel").onchange=function(){state.theme=this.value;refreshPreview();saveDraft();};
-function loadScript(src){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;s.onload=res;s.onerror=function(){rej(new Error("load failed"));};document.head.appendChild(s);});}
+function loadScript(src,integrity){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;if(integrity){s.integrity=integrity;s.crossOrigin="anonymous";}s.onload=res;s.onerror=function(){rej(new Error("load failed"));};document.head.appendChild(s);});}
+/* The only third-party code that runs here, and it runs with full access to the
+   page. Pinned by hash: a tampered or hijacked CDN response is refused by the
+   browser, which surfaces as a load failure and falls back to popupPrint().
+   Bump the hash and the version together — cdnjs publishes both. */
 async function ensurePdfLibs(){
   if(window.jspdf&&window.html2canvas)return;
-  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
-  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+    "sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA==");
+  await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+    "sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==");
 }
 /* Off-screen but laid out at 816px — a display:none or zero-width
-   frame would paginate against the wrong viewport. */
+   frame would paginate against the wrong viewport.
+
+   Deliberately NOT sandboxed, unlike the preview frame: printing calls
+   contentWindow.print() and the PDF path hands contentDocument nodes to
+   html2canvas, both of which need same-origin access. The trade is that these
+   two frames rely on esc()/safeUrl() alone, so keep that escaping airtight. */
 function hiddenFrame(){
   var f=document.createElement("iframe");
   f.setAttribute("aria-hidden","true");

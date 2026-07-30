@@ -193,7 +193,12 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
     <div class="form" id="form"></div>
     <div class="preview">
       <div class="pv-head"><span class="t">Live preview · auto-generated</span><span class="sp"></span><span class="pv-warn" id="warnTag"></span><span class="pv-scale" id="pageTag"></span><span class="pv-scale" id="scaleTag"></span></div>
-      <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no"></iframe></div>
+      <!-- sandbox without allow-same-origin puts the generated document in its
+           own opaque origin, so trip data from a share link cannot reach this
+           page's localStorage even if the escaping in js/app.js ever slips.
+           allow-scripts is all the paginator needs; it reports back by
+           postMessage, which works fine across the boundary. -->
+      <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no" sandbox="allow-scripts"></iframe></div>
       <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is US Letter portrait. Each traveler and the overview start a new page.</div>
     </div>
   </div>
