@@ -264,6 +264,26 @@ function palette(){return themeDef().palette;}
 /* US Letter portrait, fixed: 8.5x11in = 612x792pt = 816x1056 css px. */
 const PAGE_WPT=612,PAGE_HPT=792,PAGE_PXH=1056;
 function isShared(e){return e.owner==null||e.owner==="shared";}
+/* A card you have only just added has nothing on it, yet a flight still emitted
+   "Depart —" and "Arrive —" into the middle of the itinerary. Dates, times and
+   a defaulted mode do not make an item worth printing — and they must not, or
+   seeding a date on an empty card would resurrect it and, because the seed is
+   the trip start, park it at the very top. The card stays in the form; it just
+   does not reach the page until it says something. */
+const NOT_CONTENT=/^(type|owner|currency|mode|date|time|endTime|departDate|departTime|arriveDate|arriveTime|checkIn|checkOut|pickupDate|pickupTime|dropoffDate|dropoffTime)$/;
+function hasContent(e){
+  if(!e||typeof e!=="object")return false;
+  for(const k of Object.keys(e)){
+    if(NOT_CONTENT.test(k))continue;
+    const v=e[k];
+    if(Array.isArray(v)){
+      if(v.some(x=>x&&typeof x==="object"&&Object.values(x).some(y=>String(y==null?"":y).trim())))return true;
+      continue;
+    }
+    if(String(v==null?"":v).trim())return true;
+  }
+  return false;
+}
 function listFor(idx){return multi()?ents().filter(e=>{const o=(e.owner==null?"shared":String(e.owner));return o==="shared"||o===String(idx);}):ents();}
 function flightsIn(list){return list.filter(e=>e.type==="flight");}
 function firstFlight(list){const f=flightsIn(list).slice().sort((a,b)=>(toEpoch(a.departDate,a.departTime)??Infinity)-(toEpoch(b.departDate,b.departTime)??Infinity));return f[0]||null;}
@@ -351,6 +371,7 @@ function costTable(cd,heading){if(!cd.any&&!(cd.tot&&cd.tot.length))return "";le
 
 function buildSheet(s,list,eyebrowText,home){
   curHome=home||{};
+  list=list.filter(hasContent);      /* one place, so stats and route agree */
   const mt=mastTitles(s),dr=dateRangeStr(),rl=routeLine(list);
   const mastR=(dr||rl)?'<div class="mast-r">'+(dr?'<div class="daterange">'+esc(dr)+'</div>':'')+(rl?'<div class="mast-meta">'+esc(rl)+'</div>':'')+'</div>':'';
   const main='<main>\n      <h2>Journey</h2>\n      <div class="spine">\n      '+renderSpine(journeyNodes(list),s.dayGrouped)+'\n      </div>\n    </main>';
@@ -366,7 +387,7 @@ function buildSheet(s,list,eyebrowText,home){
 function buildCover(s){
   curHome={};
   const mt=mastTitles(s),dr=dateRangeStr(),ppl=people();
-  const sharedList=ents().filter(isShared);
+  const sharedList=ents().filter(e=>isShared(e)&&hasContent(e));
   const stats=[];const n=totalNights(sharedList);if(n)stats.push({v:String(n),l:"Nights"});const h=sharedList.filter(e=>e.type==="hotel").length;if(h)stats.push({v:String(h),l:h===1?"Hotel":"Hotels"});stats.push({v:String(ppl.length),l:"Travelers"});
   const mastR='<div class="mast-r">'+(dr?'<div class="daterange">'+esc(dr)+'</div>':'')+'<div class="mast-meta">'+ppl.length+' travelers</div></div>';
   const main='<main>\n      <h2>Shared plan</h2>\n      <div class="spine">\n      '+renderSpine(journeyNodes(sharedList),s.dayGrouped)+'\n      </div>\n    </main>';
@@ -620,7 +641,7 @@ function whenPaginated(iframe,html,timeout){
 window.addEventListener("message",function(ev){
   const d=ev.data;
   if(!d||d.itin!=="paginated"||ev.source!==frame.contentWindow)return;
-  lastH=d.height||lastH;applyScale();
+  lastH=d.height||lastH;applyScale();syncTopBtn();
   if(pageTag)pageTag.textContent=d.pages?d.pages+(d.pages===1?" page":" pages"):"";
   // An item taller than a whole page can't be broken cleanly, so its tail
   // is clipped. Say so rather than losing the text quietly.
@@ -1039,6 +1060,53 @@ form.addEventListener("dragend",()=>{
   form.querySelectorAll(".dragging,.dragover").forEach(x=>{x.classList.remove("dragging");x.classList.remove("dragover");});
 });
 
+/* Firefox seeds an empty <input type="time"> from the current clock, so the
+   first ArrowUp lands on whatever minute it happens to be — reported as
+   "minutes on time fields start at 23 and not 00". Chrome starts at 00 instead.
+   Seed it here so the two agree and neither depends on the time of day.
+
+   Only on the first arrow after focusing an untouched empty field: any other
+   key clears the latch, so typing a time normally is left completely alone and
+   a half-entered value is never overwritten. */
+let freshStep=null;
+const seedFor=t=>{
+  if(t.type==="time")return "00:00";
+  /* A native date picker opens on the field's own value, so the only way to
+     have it open on the trip's month is to put a date there first. Trip start,
+     or trip end if that is all there is. */
+  if(t.type==="date"){
+    const d=String(state.tripStart||state.tripEnd||"");
+    return /^\d{4}-\d{2}-\d{2}$/.test(d)?d:null;
+  }
+  return null;
+};
+const seedField=t=>{
+  const v=seedFor(t);
+  if(v==null)return false;                   /* no trip dates set: leave it alone */
+  t.value=v;
+  t.dispatchEvent(new Event("input",{bubbles:true}));   /* run the normal path */
+  return true;
+};
+form.addEventListener("focusin",e=>{
+  const t=e.target;
+  freshStep=(t&&(t.type==="time"||t.type==="date")&&!t.value)?t:null;
+});
+form.addEventListener("keydown",e=>{
+  const t=e.target;
+  if(!t||t!==freshStep)return;
+  if(e.key!=="ArrowUp"&&e.key!=="ArrowDown"){freshStep=null;return;}
+  freshStep=null;
+  if(seedField(t))e.preventDefault();        /* skip the browser's own default */
+});
+/* Clicking is what opens the picker, and it has to already hold a date by then
+   — so seed on mousedown rather than on focus. Tabbing through still leaves an
+   empty field empty. */
+form.addEventListener("mousedown",e=>{
+  const t=e.target;
+  if(!t||t.type!=="date"||t.value)return;
+  seedField(t);
+});
+
 form.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;
   const act=b.getAttribute("data-act"),i=b.hasAttribute("data-i")?+b.getAttribute("data-i"):null,s=state;
@@ -1130,6 +1198,18 @@ document.getElementById("btnBlank").onclick=()=>{if(confirm("Clear everything an
 document.getElementById("btnSave").onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=slug((state.titles||[]).filter(Boolean).join("-"))+"-itinerary.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
 document.getElementById("btnLink").onclick=async ()=>{const link=await shareLink();const done=()=>{const btn=document.getElementById("btnLink");const o=btn.textContent;btn.textContent="Copied ✓";setTimeout(()=>btn.textContent=o,1400);};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(link).then(done,()=>prompt("Copy this link:",link));}else prompt("Copy this link:",link);};
 document.getElementById("fileLoad").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const next=normalize(JSON.parse(r.result));markUndo("load file");state=next;renderForm();refreshPreview();saveDraft();}catch(err){alert("Could not read that file: "+err.message);}};r.readAsText(f);e.target.value="";};
+/* Back to top. The preview pane is the scroll container in every layout, so it
+   is the thing to scroll — not the window, which never scrolls here. */
+const previewPane=document.querySelector(".preview"),btnTop=document.getElementById("btnTop");
+const reduceMotion=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function syncTopBtn(){
+  if(btnTop&&previewPane)btnTop.classList.toggle("show",previewPane.scrollTop>300);
+}
+if(previewPane)previewPane.addEventListener("scroll",syncTopBtn,{passive:true});
+if(btnTop)btnTop.onclick=()=>{
+  previewPane.scrollTo({top:0,behavior:reduceMotion()?"auto":"smooth"});
+  btnTop.classList.remove("show");
+};
 document.getElementById("btnUndo").onclick=doUndo;
 /* Phone only (the button is hidden by CSS above 700px): reveal the pages at
    natural size, and re-measure since the wrap was display:none until now. */

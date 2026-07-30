@@ -11,7 +11,8 @@ hosting the site does not.
 
 Fill in the form on the left; the right side is a live preview of the actual
 printed pages. Every page in that preview is a real sheet of US Letter, so what
-you see is what comes out of the printer or the PDF.
+you see is what comes out of the printer or the PDF. Once you have scrolled a
+way down, a **↑ Top** button appears in the corner of the preview.
 
 **Live:** https://brandonhon.github.io/itinerary/
 
@@ -51,13 +52,19 @@ The journey orders itself by date and time — you never sort anything by hand.
 It always opens with the first flight and closes with the last. Timeline colours
 are assigned automatically from the active theme.
 
+An item you have added but not filled in yet stays out of the document until it
+says something. A date or a time on its own doesn't count, so a half-started
+card never turns up mid-itinerary as an empty entry.
+
 Alongside the journey you get a reference rail: confirmation numbers, a costed
 breakdown, a checklist, and emergency contacts.
 
 Flights take any number of connections — each one an airport and a layover, and
 they print on a single Via line. The checklist can hold more than one section:
 add a section heading and every item below it belongs to that section, and cards
-can be dragged to reorder (↑/↓ do the same thing from the keyboard).
+can be dragged to reorder with a mouse, or moved with ↑/↓. On a touch screen
+the drag handle is hidden, because HTML5 drag-and-drop never fires from touch —
+the arrows do the job there.
 
 ### Multiple travelers
 
@@ -67,6 +74,13 @@ overview page for a shared-plan cover sheet that summarises everyone's routes.
 
 Give each traveler a home timezone and flight times pick up a second line
 showing the equivalent time back home.
+
+### Dates and times
+
+Empty date fields open the calendar on your trip's month rather than on today,
+and empty time fields start at 00:00 rather than at whatever the clock happens
+to say — browsers differ on both, so the app sets them itself. Tabbing past an
+empty field still leaves it empty; nothing is filled in behind your back.
 
 ### Money
 

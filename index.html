@@ -104,7 +104,10 @@ h2:not(:first-child){margin-top:16px}
 .detail{padding-left:69px;margin-top:2px}
 .detail p{font-size:11px;color:var(--ink-2);line-height:1.42}
 .detail p + p{margin-top:2.5px}
-.detail .k{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:inline-block;min-width:52px}
+/* padding-right, not just min-width: min-width only spaces SHORT labels, so a
+   long carrier such as AIR CHINA LIMITED ran straight into the flight numbers.
+   The padding sits inside the border box, so short labels do not shift. */
+.detail .k{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:inline-block;min-width:52px;padding-right:6px}
 .mono{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.01em}
 .pref{display:inline-block;font-family:var(--mono);font-size:7.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--page);background:var(--seg);padding:1.5px 5px;border-radius:2px;vertical-align:1.5px;margin-right:5px}
 .alt{color:var(--muted) !important}
@@ -207,6 +210,7 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
            allow-scripts is all the paginator needs; it reports back by
            postMessage, which works fine across the boundary. -->
       <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no" sandbox="allow-scripts"></iframe></div>
+      <button class="to-top" id="btnTop" type="button" aria-label="Scroll the preview back to the top">↑ Top</button>
       <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is US Letter portrait. Each traveler and the overview start a new page.</div>
     </div>
   </div>
