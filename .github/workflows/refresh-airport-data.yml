@@ -1,0 +1,50 @@
+name: Refresh airport and airline data
+
+# Twice a year. New airports do open — Istanbul, Beijing Daxing and Chengdu
+# Tianfu were all missing from the previous data source — so this is worth
+# running even though daylight-saving rule changes are handled by the browser's
+# own timezone database rather than by these files.
+#
+# NOTE: GitHub disables scheduled workflows in a repository with no activity for
+# 60 days, which a six-monthly job can easily trip over. If a refresh commit
+# never appears, check the Actions tab for a disabled-workflow notice and
+# re-enable it; workflow_dispatch below runs it by hand in the meantime.
+on:
+  schedule:
+    - cron: "0 6 1 1,7 *"     # 06:00 UTC on 1 January and 1 July
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # The script refuses to write an implausibly small table, so a truncated
+      # or failed upstream fetch fails the job instead of committing a table
+      # with most of its entries deleted.
+      - name: Install build dependency
+        run: npm install --no-audit --no-fund
+
+      - name: Rebuild tables
+        run: node scripts/build-data.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/; then
+            echo "No upstream changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "data: refresh OpenFlights airport and airline tables"
+          git push
+          echo "Pushed refreshed tables."

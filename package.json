@@ -1,0 +1,11 @@
+{
+  "name": "itinerary-data-build",
+  "private": true,
+  "description": "Build-time only. The published site is plain HTML/CSS/JS and depends on none of this.",
+  "scripts": {
+    "build-data": "node scripts/build-data.mjs"
+  },
+  "devDependencies": {
+    "tz-lookup": "6.1.25"
+  }
+}
