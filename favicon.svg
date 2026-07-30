@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Itinerary">
+  <!-- The journey spine, the document's signature element, reduced to the two
+       nodes the itinerary is actually anchored on: first flight out, last
+       flight back (see routeLine() in js/app.js).
+
+       Two nodes, not three: at a 16px tab size, three r=3 nodes leave gaps too
+       small to resolve and the mark collapses into a traffic light. Keeping the
+       connecting rule visible matters more than the extra leg.
+
+       Node colours are lifted from the print palette — #20456B and #96631A are
+       tuned for paper and go muddy against a dark tab strip. -->
+  <rect width="32" height="32" rx="7" fill="#10181F"/>
+  <path d="M16 7V25" stroke="#39434E" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="16" cy="7" r="4" fill="#4C9BE0"/>
+  <circle cx="16" cy="25" r="4" fill="#E0A03C"/>
+</svg>
