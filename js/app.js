@@ -19,6 +19,73 @@ const TYPES={flight:{label:"Flight",c:"#20456B"},hotel:{label:"Hotel",c:"#00786D
 const CURRENCIES=["USD","HKD","MOP","EUR","GBP","JPY","CNY","CAD","AUD","SGD","KRW","THB"];
 const SYM={USD:"$",HKD:"HK$",MOP:"MOP ",EUR:"€",GBP:"£",JPY:"¥",CNY:"¥",CAD:"C$",AUD:"A$",SGD:"S$",KRW:"₩",THB:"฿"};
 const OFFSETS=(()=>{const a=[["","—"]];for(let m=-720;m<=840;m+=60){const s=m<0?"−":"+";const am=Math.abs(m);const hh=String(Math.floor(am/60)).padStart(2,"0");const mm=String(am%60).padStart(2,"0");a.push([String(m),"UTC"+s+hh+":"+mm]);}return a;})();
+/* Home zones are picked by name, not by UTC offset — few people know their own
+   offset, and a fixed offset is simply wrong on the far side of a DST change.
+   The offset is derived from the zone at the actual instant instead. Flight
+   legs still use OFFSETS: those are per-airport and often in a zone the
+   traveler never sets foot in outside the layover. */
+/* One entry per distinct year-round behaviour, named for the best-known city
+   that has it — 57 instead of the IANA list's 418.
+
+   Deduplicated on the winter/summer offset PAIR, not on today's offset. Those
+   are not the same thing: in January, Chicago and Costa Rica are both UTC−06:00
+   and only diverge in July, so collapsing by current offset would hand a Costa
+   Rica traveler Chicago's DST rules and be an hour wrong for half the year. 37 offsets, 57 behaviours; every one is represented exactly once. */
+const TZ_ZONES=["Pacific/Pago_Pago","America/Adak","Pacific/Honolulu","Pacific/Marquesas","America/Anchorage",
+"Pacific/Gambier","America/Los_Angeles","Pacific/Pitcairn","America/Denver","America/Phoenix",
+"America/Mexico_City","America/Chicago","America/Bogota","America/New_York","Pacific/Easter",
+"America/Caracas","America/Halifax","America/St_Johns","America/Sao_Paulo","America/Miquelon",
+"America/Santiago","America/Nuuk","America/Noronha","Atlantic/Azores","Atlantic/Cape_Verde",
+"Africa/Accra","Antarctica/Troll","Europe/London","Africa/Lagos","Europe/Paris",
+"Africa/Johannesburg","Africa/Cairo","Europe/Moscow","Asia/Tehran","Asia/Dubai",
+"Asia/Kabul","Asia/Karachi","Asia/Kolkata","Asia/Kathmandu","Asia/Dhaka",
+"Asia/Yangon","Asia/Bangkok","Asia/Shanghai","Australia/Eucla","Asia/Tokyo",
+"Australia/Darwin","Australia/Brisbane","Australia/Adelaide","Australia/Sydney","Pacific/Guadalcanal",
+"Australia/Lord_Howe","Pacific/Fiji","Pacific/Norfolk","Pacific/Auckland","Pacific/Tongatapu",
+"Pacific/Chatham","Pacific/Kiritimati"];
+const TZ_ORDER=["America","Europe","Asia","Africa","Australia","Pacific","Atlantic","Indian","Antarctica","Arctic"];
+function tzCity(tz){const s=String(tz).split("/");return (s[s.length-1]||tz).replace(/_/g," ");}
+/* Formatting an instant into a zone is the only reliable primitive the platform
+   offers here, so everything (wall clock, offset, abbreviation) is read back
+   out of one formatToParts call. */
+function tzParts(tz,date,extra){
+  const o=Object.assign({timeZone:tz,hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"},extra||{});
+  const p={};new Intl.DateTimeFormat("en-US",o).formatToParts(date).forEach(x=>{p[x.type]=x.value;});
+  if(p.hour==="24")p.hour="00";
+  return p;
+}
+function partsOffMin(p,ms){return Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-ms)/60000);}
+function offLabel(min){if(min==null)return "";const s=min<0?"−":"+";const a=Math.abs(min);return "UTC"+s+String(Math.floor(a/60)).padStart(2,"0")+":"+String(a%60).padStart(2,"0");}
+/* Several formatters per zone, so build the list once and keep it. */
+let TZOPTS=null;
+function tzOptions(){
+  if(TZOPTS)return TZOPTS;
+  const now=new Date(),y=now.getUTCFullYear(),groups={};
+  const jan=new Date(Date.UTC(y,0,15)),jul=new Date(Date.UTC(y,6,15));
+  TZ_ZONES.forEach(tz=>{
+    let p,j,u;
+    try{
+      p=tzParts(tz,now,{timeZoneName:"short"});
+      j=partsOffMin(tzParts(tz,jan),jan.getTime());
+      u=partsOffMin(tzParts(tz,jul),jul.getTime());
+    }catch(e){return;}
+    const seg=tz.split("/"),region=seg.length>1?seg[0]:"Other";
+    const n=p.timeZoneName||"",abbr=/^(GMT|UTC)/i.test(n)?"":n;
+    /* Shifting zones show both offsets, in January/July order — which is the
+       exact signature the list is deduplicated on, so no two labels can collide.
+       Today's offset alone is ambiguous (in July, New York and Santiago both
+       read UTC−04:00), and so is sorting the pair low-to-high: Halifax and
+       Santiago both span −04:00/−03:00 and differ only in which half of the
+       year each applies to. */
+    const meta=(j===u)?offLabel(j):offLabel(j)+"/"+offLabel(u).replace(/^UTC/,"");
+    (groups[region]=groups[region]||[]).push([tz,tzCity(tz)+(abbr?" · "+abbr:"")+" ("+meta+")"]);
+  });
+  TZOPTS=Object.keys(groups).sort((a,b)=>{
+    const ia=TZ_ORDER.indexOf(a),ib=TZ_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);
+  }).map(n=>[n,groups[n].sort((a,b)=>a[1].localeCompare(b[1]))]);
+  return TZOPTS;
+}
 const WD=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 const MONT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -36,13 +103,40 @@ function elapsedStr(f){const a=epUTC(f.departDate,f.departTime,f.departOff),b=ep
 function num(x){const n=parseFloat(String(x==null?"":x).replace(/[, ]/g,""));return isNaN(n)?0:n;}
 function money(cur,n){const s=own(SYM,cur)?SYM[cur]:(cur?cur+" ":"");const dec=(cur==="JPY"||cur==="KRW")?0:2;return s+Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});}
 function arrowize(s){return String(s||"").split(/\s*(?:,|→|->)\s*/).map(x=>x.trim()).filter(Boolean).join(" → ");}
-function homeLine(dateIso,timeStr,off){const hm=curHome||{};if(hm.off===""||hm.off==null)return null;if(off===""||off==null)return null;if(String(off)===String(hm.off))return null;const utc=epUTC(dateIso,timeStr,off);if(utc==null)return null;const t=utc+(+hm.off)*60000;const d=new Date(t);const p=n=>String(n).padStart(2,"0");return WD[d.getUTCDay()]+" "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())+(hm.label?" "+hm.label:"");}
+/* hm.tz is a zone name; hm.off is the older numeric offset, still honoured so
+   share links and drafts built before the switch keep rendering. */
+function homeLine(dateIso,timeStr,off){
+  const hm=curHome||{},tz=hm.tz||"",legacy=!(hm.off===""||hm.off==null);
+  if(!tz&&!legacy)return null;
+  if(off===""||off==null)return null;
+  const utc=epUTC(dateIso,timeStr,off);
+  if(utc==null)return null;
+  const pad=n=>String(n).padStart(2,"0");
+  let wd,hh,mm,homeOff,abbr="";
+  if(tz){
+    let p;try{p=tzParts(tz,new Date(utc),{weekday:"short",timeZoneName:"short"});}catch(e){return null;}
+    homeOff=partsOffMin(p,utc);
+    wd=p.weekday;hh=p.hour;mm=p.minute;
+    const n=p.timeZoneName||"";abbr=/^(GMT|UTC)/i.test(n)?"":n;
+  }else{
+    homeOff=+hm.off;
+    const d=new Date(utc+homeOff*60000);
+    wd=WD[d.getUTCDay()];hh=pad(d.getUTCHours());mm=pad(d.getUTCMinutes());
+  }
+  if(homeOff===+off)return null;                 /* same wall clock; nothing to add */
+  /* Intl only has a real abbreviation for about a quarter of zones (23%, almost
+     all in the Americas) and gives "GMT+1" for the rest, so fall back to the
+     city — "Sat 04:05 Lisbon" beats a bare "Sat 04:05". hm.label is the older
+     hand-typed override, still honoured for drafts that set one. */
+  const label=hm.label||abbr||(tz?tzCity(tz):"");
+  return wd+" "+hh+":"+mm+(label?" "+label:"");
+}
 
 function SAMPLE(){return {
   eyebrow:"Travel Itinerary",titles:["Lisbon","Porto"],tripStart:"2026-09-18",tripEnd:"2026-09-27",
   showCosts:true,dayGrouped:true,showSummaryPage:true,splitShared:true,theme:"classic",
   baseCurrency:"USD",rates:{HKD:"7.80",MOP:"8.03",EUR:"0.92",GBP:"0.79",JPY:"157",CNY:"7.2",CAD:"1.36",AUD:"1.52",SGD:"1.35",KRW:"1370",THB:"36"},
-  people:[{name:"Alex Rivera",homeOff:"-360",homeLabel:"MDT"},{name:"Sam Chen",homeOff:"-420",homeLabel:"PDT"}],
+  people:[{name:"Alex Rivera",homeTz:"America/Denver"},{name:"Sam Chen",homeTz:"America/Los_Angeles"}],
   entities:[
     {type:"flight",owner:"0",carrier:"United",flightNos:"UA0918, UA1450",originCode:"DEN",originName:"Denver",departDate:"2026-09-18",departTime:"16:20",departOff:"-360",departZone:"MDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"11:05",arriveOff:"60",arriveZone:"WEST",connections:"EWR · 1h 40m",link:"",conf:"UA7Q2LM",cost:"1180.44",currency:"USD",note:"Overnight transatlantic."},
     {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0244, DL0118",originCode:"SEA",originName:"Seattle",departDate:"2026-09-18",departTime:"13:10",departOff:"-420",departZone:"PDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"12:50",arriveOff:"60",arriveZone:"WEST",connections:"JFK · 2h 05m",link:"",conf:"DLK83RP",cost:"1342.90",currency:"USD",note:""},
@@ -85,7 +179,7 @@ function SAMPLE(){return {
   ],
   footer:["All times local","WEST = UTC+1","Rev. 1 · Draft"]
 };}
-function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,theme:"classic",baseCurrency:"USD",rates:{},people:[{name:"",homeOff:"",homeLabel:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
+function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,theme:"classic",baseCurrency:"USD",rates:{},people:[{name:"",homeTz:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
 let state=SAMPLE();
 let curHome={};
 
@@ -214,7 +308,7 @@ function buildCover(s){
   const foot='<footer><span>'+esc(ft[0]||"")+'</span><span>'+esc(ft[1]||"")+'</span><span>Overview</span></footer>';
   return '<section class="sheet" data-run="'+esc(mt.plain)+'" data-runmeta="'+esc(s.eyebrow+" · Overview")+'">\n\n  <div class="mast"><div><div class="eyebrow">'+esc(s.eyebrow+" · Overview")+'</div><h1 style="font-size:'+mt.fs+'px">'+mt.html+'</h1></div>'+mastR+'</div>\n\n  '+statStrip(stats)+'\n\n  <div class="cols">\n\n    '+main+'\n\n    <aside class="rail">\n\n      '+rail+'\n\n    </aside>\n  </div>\n\n  '+foot+'\n\n</section>';
 }
-function buildBody(s){const ppl=people(),mm=ppl.length>1;let sheets=[];if(mm&&s.showSummaryPage)sheets.push(buildCover(s));ppl.forEach((p,idx)=>{const list=mm?listFor(idx):ents();const eb=s.eyebrow+(p.name?" · "+p.name:"");sheets.push(buildSheet(s,list,eb,{off:p.homeOff,label:p.homeLabel}));});return sheets.join("\n\n");}
+function buildBody(s){const ppl=people(),mm=ppl.length>1;let sheets=[];if(mm&&s.showSummaryPage)sheets.push(buildCover(s));ppl.forEach((p,idx)=>{const list=mm?listFor(idx):ents();const eb=s.eyebrow+(p.name?" · "+p.name:"");sheets.push(buildSheet(s,list,eb,{tz:p.homeTz,off:p.homeOff,label:p.homeLabel}));});return sheets.join("\n\n");}
 
 /* ═══════ paginator ═══════════════════════════════════════════
    Injected into, and executed inside, the generated document —
@@ -385,7 +479,7 @@ function wrapDoc(bodyHtml,titleText){const css=document.getElementById("itin-css
   return '<!DOCTYPE html>\n<html lang="en" class="paginating">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="color-scheme" content="light only">\n<title>'+esc(titleText)+'</title>\n<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">\n<style>\n'+css+'\n</style>\n'+extraCss()+'\n</head>\n<body>\n'+bodyHtml+'\n<script>var ITIN_ORIGIN='+JSON.stringify(postTarget())+';\n'+PAGINATOR+'<\/script>\n</body>\n</html>';}
 function docTitle(){const t=(state.titles||[]).filter(x=>x&&x.trim()).join(" & ");return t+(dateRangeStr()?" — "+dateRangeStr():"");}
 function buildDoc(s){return wrapDoc(buildBody(s),docTitle());}
-function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{off:ppl[idx].homeOff,label:ppl[idx].homeLabel}),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
+function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{tz:ppl[idx].homeTz,off:ppl[idx].homeOff,label:ppl[idx].homeLabel}),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
 
 /* ===== preview ===== */
 const frame=document.getElementById("frame"),pvwrap=document.getElementById("pvwrap"),
@@ -449,6 +543,11 @@ function area(path,val,ph){return '<textarea class="f" data-path="'+path+'" plac
 function dateF(path,val){return '<input type="date" class="f" data-path="'+path+'" value="'+esc(val)+'">';}
 function timeF(path,val){return '<input type="time" class="f" data-path="'+path+'" value="'+esc(val)+'">';}
 function sel(path,val,opts){const o=opts.map(op=>{const v=Array.isArray(op)?op[0]:op,t=Array.isArray(op)?op[1]:op;return '<option value="'+esc(v)+'"'+(String(v)===String(val)?" selected":"")+'>'+esc(t)+'</option>';}).join("");return '<select class="f" data-path="'+path+'">'+o+'</select>';}
+/* ~400 zones is too many for a flat list, so group them by region. */
+function selGroups(path,val,groups){
+  const o=groups.map(g=>'<optgroup label="'+esc(g[0])+'">'+g[1].map(op=>'<option value="'+esc(op[0])+'"'+(String(op[0])===String(val)?" selected":"")+'>'+esc(op[1])+'</option>').join("")+'</optgroup>').join("");
+  return '<select class="f" data-path="'+path+'"><option value=""'+(val?"":" selected")+'>—</option>'+o+'</select>';
+}
 function chk(path,val,label){return '<label class="ck"><input type="checkbox" data-path="'+path+'"'+(val?" checked":"")+'> '+esc(label)+'</label>';}
 function fld(lb,ctl,wide){return '<div class="field'+(wide?" wide":"")+'"><label class="lb">'+lb+'</label>'+ctl+'</div>';}
 function ibtn(act,i,sym,cls,dis){return '<button class="ic'+(cls?" "+cls:"")+'" data-act="'+act+'" data-i="'+i+'"'+(dis?" disabled":"")+'>'+sym+'</button>';}
@@ -503,8 +602,9 @@ function renderForm(){
   h+='<div class="sec"><h2>Header</h2><div class="sbody">';
   h+=fld("Eyebrow",inp("eyebrow",s.eyebrow,"Travel Itinerary"),true);
   h+='<div class="sub-h">Travelers</div>';
-  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+'<div class="grid">'+fld("Home timezone",sel("people."+i+".homeOff",p.homeOff||"",OFFSETS))+fld("Home label",inp("people."+i+".homeLabel",p.homeLabel,"CDT"))+'</div>'+'</div>';});
+  people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="person-add">+ Add traveler</button></div>';
+  h+='<div class="hint">Zones that shift for daylight saving list both offsets, January first. The itinerary works out which one applies on each date.</div>';
   if(people().length>1)h+='<div class="hint">Each traveler gets its own page. Assign flights (and anything else that differs) to a traveler; leave shared items on “Both / all.”</div>';
   h+='<div class="sub-h">Titles</div>';
   (s.titles||[]).forEach((t,i)=>{h+='<div class="tt">'+inp("titles."+i,t,"City")+ibtn("title-up",i,"↑",null,i===0)+ibtn("title-down",i,"↓",null,i===s.titles.length-1)+ibtn("title-del",i,"✕","del",s.titles.length<=1)+'</div>';});
@@ -551,6 +651,23 @@ function renderForm(){
   form.innerHTML=h;
   const ts=document.getElementById("themeSel");if(ts)ts.value=state.theme||"classic";
 }
+/* renderForm() replaces the whole panel, so a newly added row has to be found
+   again by path and focused explicitly. Prefer a text input over the type or
+   owner selects that lead some cards — that is the box you actually type in. */
+function focusNew(prefix){
+  const hit=[...form.querySelectorAll("[data-path]")].filter(el=>{
+    const p=el.getAttribute("data-path");
+    return p===prefix||p.startsWith(prefix+".");
+  });
+  const inputs=hit.filter(x=>x.tagName==="INPUT"&&x.type!=="checkbox");
+  /* Skip fields labelled "(opt.)" — on a transfer the first input is the
+     optional provider, and the caret belongs in From instead. */
+  const wanted=x=>{const f=x.closest(".field"),l=f&&f.querySelector(".lb");return !(l&&/\(opt\.\)/i.test(l.textContent));};
+  const el=inputs.find(wanted)||inputs[0]||hit[0];
+  if(!el)return;
+  el.focus();
+  (el.closest(".card")||el).scrollIntoView({block:"center"});
+}
 function updateSummary(){const d=form.querySelector(".derived");if(d)d.innerHTML=summaryHTML();}
 function updateRates(){const b=document.getElementById("ratesBox");if(b)b.innerHTML=ratesEditor();}
 
@@ -581,24 +698,25 @@ form.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;
   const act=b.getAttribute("data-act"),i=b.hasAttribute("data-i")?+b.getAttribute("data-i"):null,s=state;
   if(act==="export-person"){exportPDF(buildDocFor(i));return;}
-  if(act==="person-add")s.people.push({name:""});
+  let fx=null;                                   /* path prefix of the row just added */
+  if(act==="person-add"){s.people.push({name:"",homeTz:""});fx="people."+(s.people.length-1);}
   else if(act==="person-del"){s.people.splice(i,1);if(s.people.length<1)s.people=[{name:""}];s.entities.forEach(en=>{if(en.owner==null||en.owner==="shared")return;const o=+en.owner;if(isNaN(o))return;if(o===i)en.owner="shared";else if(o>i)en.owner=String(o-1);});if(s.people.length<2)s.entities.forEach(en=>{en.owner="shared";});}
-  else if(act==="title-add")s.titles.push("");
+  else if(act==="title-add"){s.titles.push("");fx="titles."+(s.titles.length-1);}
   else if(act==="title-del"){if(s.titles.length>1)s.titles.splice(i,1);}
   else if(act==="title-up")move(s.titles,i,-1);
   else if(act==="title-down")move(s.titles,i,1);
-  else if(act.startsWith("add-")){const k=act.slice(4);if(SEEDS[k])s.entities.push(SEEDS[k]());}
+  else if(act.startsWith("add-")){const k=act.slice(4);if(own(SEEDS,k)){s.entities.push(SEEDS[k]());fx="entities."+(s.entities.length-1);}}
   else if(act==="ent-del")s.entities.splice(i,1);
-  else if(act==="ref-add")(s.emergency=s.emergency||[]).push({label:"",value:""});
+  else if(act==="ref-add"){(s.emergency=s.emergency||[]).push({label:"",value:""});fx="emergency."+(s.emergency.length-1);}
   else if(act==="ref-del")s.emergency.splice(i,1);
   else if(act==="ref-up")move(s.emergency,i,-1);
   else if(act==="ref-down")move(s.emergency,i,1);
-  else if(act==="chk-add")s.checklist.push({title:"",body:""});
+  else if(act==="chk-add"){s.checklist.push({title:"",body:""});fx="checklist."+(s.checklist.length-1);}
   else if(act==="chk-del")s.checklist.splice(i,1);
   else if(act==="chk-up")move(s.checklist,i,-1);
   else if(act==="chk-down")move(s.checklist,i,1);
   else return;
-  renderForm();schedulePreview();
+  renderForm();if(fx)focusNew(fx);schedulePreview();
 });
 
 /* ===== share link (gzip when available, plain-base64 fallback for old links) ===== */
