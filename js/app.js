@@ -750,8 +750,12 @@ function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx
    correct wherever the calendar is read. Everything else has a bare local time,
    matching the document's "all times local" footer, so it is emitted floating:
    no zone, interpreted wherever the reader happens to be. */
+/* Every line break has to go, not just CRLF and LF: a lone CR reaches this from
+   a share link or hand-edited JSON — a textarea can never produce one — and
+   parsers that treat CR as a terminator would read whatever follows it as
+   further calendar lines. */
 function icsEsc(v){return String(v==null?"":v).replace(/\\/g,"\\\\").replace(/;/g,"\\;")
-  .replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");}
+  .replace(/,/g,"\\,").replace(/\r\n|[\r\n]/g,"\\n");}
 /* RFC 5545 folds at 75 octets, and these lines carry non-ASCII place names, so
    measure bytes rather than characters. */
 function icsFold(line){
@@ -766,9 +770,18 @@ function icsFold(line){
   return out+cur;
 }
 function icsDate(iso){return String(iso||"").replace(/-/g,"");}
-function icsLocal(iso,tm){
+/* Day arithmetic in UTC, so a date never lands on the hour a zone skips for
+   daylight saving and slides to the day before. */
+function icsDateAdd(iso,days){
+  const [y,m,d]=parseISO(iso);
+  if(!y||!m||!d)return icsDate(iso);
+  const t=new Date(Date.UTC(y,m-1,d+days)),p=n=>String(n).padStart(2,"0");
+  return t.getUTCFullYear()+p(t.getUTCMonth()+1)+p(t.getUTCDate());
+}
+function icsLocal(iso,tm,plusDays){
   const t=String(tm||"00:00").split(":");
-  return icsDate(iso)+"T"+String(t[0]||"00").padStart(2,"0")+String(t[1]||"00").padStart(2,"0")+"00";
+  return (plusDays?icsDateAdd(iso,plusDays):icsDate(iso))+
+    "T"+String(t[0]||"00").padStart(2,"0")+String(t[1]||"00").padStart(2,"0")+"00";
 }
 function icsUTC(ms){
   const d=new Date(ms),p=n=>String(n).padStart(2,"0");
@@ -784,24 +797,34 @@ function icsWhen(e){
     if(e.departDate)return {start:"DTSTART:"+icsLocal(e.departDate,e.departTime),end:"DURATION:PT2H"};
     return null;
   }
+  /* DTEND is exclusive on an all-day span, so every one of these has to end on
+     the day AFTER the last day it covers. Ending it on the same day is a span
+     of zero days, which some clients import as nothing at all. */
   if(e.type==="hotel"){
     if(!e.checkIn)return null;
-    /* An all-day span; DTEND is exclusive, so the checkout date gives exactly
-       the nights stayed. */
+    /* The checkout date is already the day after the last night, so it is used
+       as-is — that is what makes the span exactly the nights stayed. Only a
+       missing or backwards checkout needs the day added. */
     return {start:"DTSTART;VALUE=DATE:"+icsDate(e.checkIn),
-      end:"DTEND;VALUE=DATE:"+icsDate(e.checkOut||e.checkIn)};
+      end:"DTEND;VALUE=DATE:"+(e.checkOut&&e.checkOut>e.checkIn?icsDate(e.checkOut):icsDateAdd(e.checkIn,1))};
   }
   if(e.type==="car"){
     if(!e.pickupDate)return null;
+    /* Unlike a hotel, you still have the car on the drop-off day, so that day
+       is inside the span and the exclusive end is the one after it. */
     if(e.dropoffDate)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.pickupDate),
-      end:"DTEND;VALUE=DATE:"+icsDate(e.dropoffDate)};
+      end:"DTEND;VALUE=DATE:"+icsDateAdd(e.dropoffDate>e.pickupDate?e.dropoffDate:e.pickupDate,1)};
     return {start:"DTSTART:"+icsLocal(e.pickupDate,e.pickupTime),end:"DURATION:PT1H"};
   }
   if(!e.date)return null;
   if(!e.time)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.date),
-    end:"DTEND;VALUE=DATE:"+icsDate(e.date)};
-  if(e.type==="meeting"&&e.endTime)
-    return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DTEND:"+icsLocal(e.date,e.endTime)};
+    end:"DTEND;VALUE=DATE:"+icsDateAdd(e.date,1)};
+  /* An end time at or before the start is a meeting that runs past midnight —
+     a 20:00 dinner ending at 01:00 — so it ends on the next day. Equal times
+     say nothing about the length and fall through to the hour below. */
+  if(e.type==="meeting"&&e.endTime&&e.endTime!==e.time)
+    return {start:"DTSTART:"+icsLocal(e.date,e.time),
+      end:"DTEND:"+icsLocal(e.date,e.endTime,e.endTime>e.time?0:1)};
   /* No end time recorded, so an hour — long enough to show up as a block, short
      enough not to swallow the afternoon. */
   return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DURATION:PT1H"};
