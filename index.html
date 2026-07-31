@@ -197,6 +197,7 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
     <button class="btn" id="btnSave">Save data</button>
     <label class="btn" for="fileLoad">Load data</label>
     <input type="file" id="fileLoad" accept="application/json,.json">
+    <button class="btn" id="btnIcs">Calendar</button>
     <button class="btn" id="btnPrint">Print</button>
     <button class="btn pri" id="btnPdf">Export PDF</button>
   </div>
@@ -211,7 +212,7 @@ footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}
            postMessage, which works fine across the boundary. -->
       <div id="pvwrap"><iframe id="frame" title="preview" scrolling="no" sandbox="allow-scripts"></iframe></div>
       <button class="to-top" id="btnTop" type="button" aria-label="Scroll the preview back to the top">↑ Top</button>
-      <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is US Letter portrait. Each traveler and the overview start a new page.</div>
+      <div class="tip">Every page below is a real sheet of paper — content is packed to fit, so nothing is ever cut in half. <b>Export PDF</b> builds a file and opens it in a new tab; <b>Print</b> sends the same pages to the browser dialog. Output is portrait, at the paper size you pick under Document &amp; display. Each traveler and the overview start a new page.</div>
     </div>
   </div>
 </div>

@@ -10,8 +10,9 @@ and committed. Regenerating them needs Node and a single package; using or
 hosting the site does not.
 
 Fill in the form on the left; the right side is a live preview of the actual
-printed pages. Every page in that preview is a real sheet of US Letter, so what
-you see is what comes out of the printer or the PDF. Once you have scrolled a
+printed pages. Every page in that preview is a real sheet of paper — US Letter
+or A4, whichever you pick — so what you see is what comes out of the printer or
+the PDF. Once you have scrolled a
 way down, a **↑ Top** button appears in the corner of the preview.
 
 **Live:** https://brandonhon.github.io/itinerary/
@@ -39,6 +40,7 @@ tab won't lose it.
 | **Save data** | Downloads the trip as JSON |
 | **Load data** | Restores a JSON file |
 | **Print** | Sends the paginated pages to the browser's print dialog |
+| **Calendar** | Downloads the trip as an `.ics` you can import into any calendar |
 | **Export PDF** | Builds a PDF and opens it in a new tab |
 | **Edit this trip** | Phones only, on a shared link — swaps the reading view for the full builder |
 
@@ -66,9 +68,12 @@ rather than one: a timetable, a station map and a booking can all sit on the
 same leg.
 
 Transport also names the service — `IC 522`, `Line 2` — which is its
-counterpart to a flight number, and any stop can be marked as a change rather
-than a call. A whole multi-line journey fits on one item: board the Red line,
-stay on through Saldanha, change to the Green line at Baixa-Chiado. The checklist can hold more than one section:
+counterpart to a flight number, along with a direction (`towards Cais do
+Sodré`), and any stop can be marked as a change rather than a call. A whole
+multi-line journey fits on one item: board the Red line, stay on through
+Saldanha, change to the Green line at Baixa-Chiado. Stops print one per line
+under a single heading rather than running together, and the note sits last on
+its own row. The checklist can hold more than one section:
 add a section heading and every item below it belongs to that section, and cards
 can be dragged to reorder with a mouse, or moved with ↑/↓. On a touch screen
 the drag handle is hidden, because HTML5 drag-and-drop never fires from touch —
@@ -137,8 +142,14 @@ quietly — shorten the note when you see that warning.
 
 ## Printing
 
-Output is US Letter portrait (8.5 × 11 in). Each page box is exactly one sheet,
-so the pages tile 1:1 with no scaling and no blank sheets between them.
+Output is portrait, at **US Letter (8.5 × 11 in) or A4 (210 × 297 mm)** — set
+under Document & display. Each page box is exactly one sheet of whichever you
+chose, so the pages tile 1:1 with no scaling and no blank sheets between them.
+A4 fits a little more per page, so the same trip may come out a page shorter.
+
+Pick A4 if you might print abroad: it is the standard nearly everywhere outside
+North America, and a Letter-shaped document printed on A4 gets scaled or
+clipped.
 
 For best results, print at 100% scale with margins set to none — the document
 carries its own margins. Background colours are force-flagged, so you do not
@@ -148,6 +159,22 @@ need to enable "Print backgrounds"; borders print regardless.
 612 × 792 pt document. Text in the exported PDF is therefore not selectable. If
 you want selectable text and working links, use **Print** and choose "Save as
 PDF" as the destination — that path is vector.
+
+## Calendar
+
+**Calendar** downloads the whole trip as an `.ics` file — import it into Google
+Calendar, Apple Calendar, Outlook or anything else that reads the format.
+
+Flights carry real UTC offsets, so those events are written in UTC and stay
+correct wherever they are read. Everything else has a local time with no zone,
+matching the document's "all times local" footer, so those are written as
+floating times and show at the same clock time whatever zone you are in. Hotels
+and rental cars become all-day spans; anything with a time but no end gets an
+hour. Confirmation numbers, stops, flight numbers and links go into each event's
+description.
+
+The file covers the whole trip rather than one traveler, since a calendar is
+personal and unwanted events are easy to delete.
 
 ## Sharing
 

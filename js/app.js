@@ -160,6 +160,15 @@ function linksHtml(e){
   }).join(" · ");
 }
 function firstLink(e){const l=linkList(e);return l.length?safeUrl(l[0].url):(e&&e.link)||"";}
+/* One entry per stop, for callers that stack them. connText() still joins for
+   flights, where a leg has one or two layovers and a single line reads better. */
+function connLines(e){
+  return connList(e).map(c=>{
+    const head=[String(c.place||"").trim(),String(c.wait||"").trim()].filter(Boolean).join(" · ");
+    const ch=String(c.change||"").trim();
+    return head?(ch?head+" · change to "+ch:head):(ch?"change to "+ch:"");
+  }).filter(Boolean);
+}
 function connText(e){
   return connList(e).map(c=>{
     const head=[String(c.place||"").trim(),String(c.wait||"").trim()].filter(Boolean).join(" · ");
@@ -203,7 +212,7 @@ function homeLine(dateIso,timeStr,off){
 
 function SAMPLE(){return {
   eyebrow:"Travel Itinerary",titles:["Lisbon","Porto"],tripStart:"2026-09-18",tripEnd:"2026-09-27",
-  showCosts:true,dayGrouped:true,showSummaryPage:true,splitShared:true,theme:"classic",
+  showCosts:true,dayGrouped:true,showSummaryPage:true,splitShared:true,theme:"classic",paper:"letter",
   baseCurrency:"USD",rates:{HKD:"7.80",MOP:"8.03",EUR:"0.92",GBP:"0.79",JPY:"157",CNY:"7.2",CAD:"1.36",AUD:"1.52",SGD:"1.35",KRW:"1370",THB:"36"},
   people:[{name:"Alex Rivera",homeTz:"America/Denver"},{name:"Sam Chen",homeTz:"America/Los_Angeles"}],
   entities:[
@@ -248,7 +257,7 @@ function SAMPLE(){return {
   ],
   footer:["All times local","WEST = UTC+1","Rev. 1 · Draft"]
 };}
-function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,theme:"classic",baseCurrency:"USD",rates:{},people:[{name:"",homeTz:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
+function BLANK(){return {eyebrow:"Travel Itinerary",titles:["Destination"],tripStart:"",tripEnd:"",showCosts:true,dayGrouped:false,showSummaryPage:false,splitShared:false,theme:"classic",paper:"letter",baseCurrency:"USD",rates:{},people:[{name:"",homeTz:""}],entities:[],checklistHeading:"Before departure",checklist:[],emergency:[],footer:["","",""]};}
 let state=SAMPLE();
 let curHome={};
 
@@ -286,7 +295,16 @@ function multi(){return people().length>1;}
 function themeDef(){return own(THEMES,state.theme)?THEMES[state.theme]:THEMES.classic;}
 function palette(){return themeDef().palette;}
 /* US Letter portrait, fixed: 8.5x11in = 612x792pt = 816x1056 css px. */
-const PAGE_WPT=612,PAGE_HPT=792,PAGE_PXH=1056;
+/* Paper. Letter stays the built-in default in index.html's stylesheet so the
+   fallback path still looks right; a non-default choice is injected into the
+   generated document by extraCss(). Sizes are given in CSS px at 96dpi, which
+   is what the paginator measures and what html2canvas clips to, plus points for
+   the PDF page box. A4 is 210x297mm = 793.7 x 1122.5px = 595.28 x 841.89pt. */
+const PAPERS={
+  letter:{label:"US Letter (8.5 × 11 in)",css:"8.5in",cssH:"11in",pxW:816,pxH:1056,wpt:612,hpt:792},
+  a4:{label:"A4 (210 × 297 mm)",css:"210mm",cssH:"297mm",pxW:793.7,pxH:1122.52,wpt:595.28,hpt:841.89}
+};
+function paperDef(){return own(PAPERS,state.paper)?PAPERS[state.paper]:PAPERS.letter;}
 function isShared(e){return e.owner==null||e.owner==="shared";}
 /* A card you have only just added has nothing on it, yet a flight still emitted
    "Depart —" and "Arrive —" into the middle of the itinerary. Dates, times and
@@ -417,10 +435,16 @@ function nodesFor(e,id){
   if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="transport"){
     const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:firstLink(e)};
-    node.lines.push(L("badge",e.mode||"Transport",e.note||""));
+    node.lines.push(L("badge",e.mode||"Transport",""));
     if(String(e.line||"").trim())node.lines.push(L("key","Line",e.line,true,false));
-    {const via=connText(e);if(via)node.lines.push(L("key","Stops",via));}
+    if(String(e.direction||"").trim())node.lines.push(L("key","Direction",e.direction));
+    /* Stacked, one stop per row: a route calling at five places was becoming a
+       single unreadable string. The label shows once and the rest align under it. */
+    connLines(e).forEach((t,idx)=>node.lines.push(
+      idx===0?L("key","Stops",t):{lead:"key",cont:true,text:t}));
     {const lh=linksHtml(e);if(lh)node.lines.push({lead:"key",leadText:"Links",html:lh});}
+    /* Note last and on its own line, the way a hotel does it. */
+    if(String(e.note||"").trim())node.lines.push(L("key","Note",e.note));
     return [node];
   }
   if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("none","",e.note));return [node];}
@@ -433,7 +457,11 @@ function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(
 
 /* ===== output ===== */
 function titleFont(len){if(len<=14)return 34;if(len<=20)return 29;if(len<=28)return 24;if(len<=38)return 20;if(len<=52)return 17;return 15;}
-function renderLine(ln){let lead="";if(ln.lead==="badge"&&ln.leadText)lead='<span class="pref">'+esc(ln.leadText)+'</span>';else if(ln.lead==="key"&&ln.leadText)lead='<span class="k">'+esc(ln.leadText)+'</span>';
+function renderLine(ln){let lead="";if(ln.lead==="badge"&&ln.leadText)lead='<span class="pref">'+esc(ln.leadText)+'</span>';
+  else if(ln.lead==="key"&&ln.leadText)lead='<span class="k">'+esc(ln.leadText)+'</span>';
+  /* Second and later rows of a stacked list: an empty label span, which still
+     takes its min-width, so the values stay in one column under the heading. */
+  else if(ln.lead==="key"&&ln.cont)lead='<span class="k"></span>';
   /* ln.html is only ever set from linksHtml(), which sanitises both the href
      and the label itself. Everything else still goes through inl(). */
   const body=ln.html?ln.html:(ln.mono?'<span class="mono">'+inl(ln.text)+'</span>':inl(ln.text));
@@ -684,7 +712,15 @@ if(D.fonts&&D.fonts.ready)D.fonts.ready.then(once,once);else once();
 function extraCss(){const th=themeDef();const varOv=Object.keys(th.vars).length?':root{'+Object.keys(th.vars).map(k=>k+":"+th.vars[k]).join(";")+'}':'';
   const dh='.dayhead{margin:6px 0 11px -26px;padding-bottom:5px;border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:9px}.dayhead .dn{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}.dayhead .dd{font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.01em}.leg+.dayhead{margin-top:14px}';
   const page='html[data-print] .page{box-shadow:none;margin:0}';
-  return '<style>'+varOv+dh+page+'</style>';}
+  /* Letter is already the default in the base stylesheet; anything else has to
+     override the box, the @page box and the print width together, or the
+     paginator packs to one size while the printer uses another. */
+  const pg=paperDef();
+  const paper=(state.paper&&state.paper!=="letter")
+    ? '.sheet,.page{width:'+pg.css+'}.sheet{min-height:'+pg.cssH+'}.page{height:'+pg.cssH+'}'+
+      '@page{size:'+pg.css+' '+pg.cssH+';margin:0}@media print{html,body{width:'+pg.css+'}}'
+    : '';
+  return '<style>'+varOv+dh+page+paper+'</style>';}
 /* Opened from file://, location.origin is "null" and no targetOrigin can match,
    so fall back to "*" there. The payload is a page count and a height. */
 function postTarget(){const o=location.origin;return (o&&o!=="null")?o:"*";}
@@ -693,6 +729,109 @@ function wrapDoc(bodyHtml,titleText){const css=document.getElementById("itin-css
 function docTitle(){const t=(state.titles||[]).filter(x=>x&&x.trim()).join(" & ");return t+(dateRangeStr()?" — "+dateRangeStr():"");}
 function buildDoc(s){return wrapDoc(buildBody(s),docTitle());}
 function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx):ents();const eb=state.eyebrow+(ppl[idx].name?" · "+ppl[idx].name:"");return wrapDoc(buildSheet(state,list,eb,{tz:ppl[idx].homeTz,off:ppl[idx].homeOff,label:ppl[idx].homeLabel},personCur(ppl[idx])),docTitle()+(ppl[idx].name?" · "+ppl[idx].name:""));}
+
+/* ===== calendar export =====
+   One .ics for the whole trip, generated here — no server, same as the PDF.
+   Flights carry real UTC offsets, so those events are emitted in UTC and stay
+   correct wherever the calendar is read. Everything else has a bare local time,
+   matching the document's "all times local" footer, so it is emitted floating:
+   no zone, interpreted wherever the reader happens to be. */
+function icsEsc(v){return String(v==null?"":v).replace(/\\/g,"\\\\").replace(/;/g,"\\;")
+  .replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");}
+/* RFC 5545 folds at 75 octets, and these lines carry non-ASCII place names, so
+   measure bytes rather than characters. */
+function icsFold(line){
+  const enc=new TextEncoder();
+  if(enc.encode(line).length<=75)return line;
+  let out="",cur="",bytes=0;
+  for(const ch of line){
+    const n=enc.encode(ch).length;
+    if(bytes+n>74){out+=cur+"\r\n ";cur="";bytes=0;}
+    cur+=ch;bytes+=n;
+  }
+  return out+cur;
+}
+function icsDate(iso){return String(iso||"").replace(/-/g,"");}
+function icsLocal(iso,tm){
+  const t=String(tm||"00:00").split(":");
+  return icsDate(iso)+"T"+String(t[0]||"00").padStart(2,"0")+String(t[1]||"00").padStart(2,"0")+"00";
+}
+function icsUTC(ms){
+  const d=new Date(ms),p=n=>String(n).padStart(2,"0");
+  return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+"T"+
+    p(d.getUTCHours())+p(d.getUTCMinutes())+"00Z";
+}
+/* Start, end and whether it is an all-day span, per item type. */
+function icsWhen(e){
+  if(e.type==="flight"){
+    const a=epUTC(e.departDate,e.departTime,e.departOff),b=epUTC(e.arriveDate,e.arriveTime,e.arriveOff);
+    if(a!=null&&b!=null&&b>a&&e.departOff!==""&&e.arriveOff!=="")
+      return {start:"DTSTART:"+icsUTC(a),end:"DTEND:"+icsUTC(b)};
+    if(e.departDate)return {start:"DTSTART:"+icsLocal(e.departDate,e.departTime),end:"DURATION:PT2H"};
+    return null;
+  }
+  if(e.type==="hotel"){
+    if(!e.checkIn)return null;
+    /* An all-day span; DTEND is exclusive, so the checkout date gives exactly
+       the nights stayed. */
+    return {start:"DTSTART;VALUE=DATE:"+icsDate(e.checkIn),
+      end:"DTEND;VALUE=DATE:"+icsDate(e.checkOut||e.checkIn)};
+  }
+  if(e.type==="car"){
+    if(!e.pickupDate)return null;
+    if(e.dropoffDate)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.pickupDate),
+      end:"DTEND;VALUE=DATE:"+icsDate(e.dropoffDate)};
+    return {start:"DTSTART:"+icsLocal(e.pickupDate,e.pickupTime),end:"DURATION:PT1H"};
+  }
+  if(!e.date)return null;
+  if(!e.time)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.date),
+    end:"DTEND;VALUE=DATE:"+icsDate(e.date)};
+  if(e.type==="meeting"&&e.endTime)
+    return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DTEND:"+icsLocal(e.date,e.endTime)};
+  /* No end time recorded, so an hour — long enough to show up as a block, short
+     enough not to swallow the afternoon. */
+  return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DURATION:PT1H"};
+}
+function icsWhere(e){
+  return String(e.address||e.location||e.venue||e.place||e.pickupPlace||
+    (e.type==="flight"?(e.originName||e.originCode||""):"")||e.from||"").trim();
+}
+function icsDetail(e){
+  const bits=[];
+  if(e.note)bits.push(e.note);
+  if(e.body)bits.push(e.body);
+  if(e.conf)bits.push("Confirmation: "+e.conf);
+  const via=connText(e);
+  if(via)bits.push((e.type==="flight"?"Via: ":"Stops: ")+via);
+  if(e.flightNos)bits.push("Flight: "+arrowize(e.flightNos));
+  if(e.line)bits.push("Line: "+e.line);
+  if(e.direction)bits.push("Direction: "+e.direction);
+  linkList(e).forEach(x=>bits.push(safeUrl(x.url)));
+  if(e.link&&safeUrl(e.link))bits.push(safeUrl(e.link));
+  return bits.join("\n");
+}
+function buildICS(){
+  const stamp=icsUTC(Date.now());
+  const host=(location.hostname||"itinerary").replace(/[^\w.-]/g,"");
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Itinerary Builder//EN","CALSCALE:GREGORIAN",
+    "X-WR-CALNAME:"+icsEsc(docTitle()||"Itinerary")];
+  ents().filter(hasContent).forEach((e,i)=>{
+    const when=icsWhen(e);
+    if(!when)return;
+    const title=labelFor(e)||"Itinerary item";
+    lines.push("BEGIN:VEVENT",
+      "UID:itin-"+i+"-"+slug(title)+"@"+host,
+      "DTSTAMP:"+stamp,when.start,when.end,
+      "SUMMARY:"+icsEsc(title));
+    const where=icsWhere(e);
+    if(where)lines.push("LOCATION:"+icsEsc(where));
+    const detail=icsDetail(e);
+    if(detail)lines.push("DESCRIPTION:"+icsEsc(detail));
+    lines.push("END:VEVENT");
+  });
+  lines.push("END:VCALENDAR");
+  return lines.map(icsFold).join("\r\n")+"\r\n";
+}
 
 /* ===== preview ===== */
 const frame=document.getElementById("frame"),pvwrap=document.getElementById("pvwrap"),
@@ -707,7 +846,7 @@ const FRAME_SLACK=48;
 /* Preview iframe width: 816px paper + 16px slack each side, so the paper's
    drop-shadow shows on the right as it does on the left. Matches #frame in
    css/app.css. */
-const FRAME_W=848;
+const framePaperW=()=>Math.ceil(paperDef().pxW)+32;   /* 16px of slack each side */
 /* Below this width the paper cannot be scaled down and stay legible, so it is
    shown at natural size and left to the browser's own zoom instead. Kept in
    sync with the phone media query in css/app.css. */
@@ -721,12 +860,14 @@ function applyScale(){
        Collapsed, the frame keeps its height and the wrap clips it to nothing,
        so the document still paginates and can report its page count. */
     frame.style.transform="none";
+    frame.style.width=framePaperW()+"px";
     frame.style.height=h+"px";
     pvwrap.style.height=document.body.classList.contains("pv-open")?"auto":"0px";
     scaleTag.textContent="100%";
     return;
   }
-  const w=pvwrap.clientWidth,sc=Math.min(1,w/FRAME_W);
+  const w=pvwrap.clientWidth,sc=Math.min(1,w/framePaperW());
+  frame.style.width=framePaperW()+"px";
   frame.style.transform="scale("+sc+")";
   frame.style.height=h+"px";
   pvwrap.style.height=(h*sc)+"px";
@@ -889,7 +1030,7 @@ function entityCard(e,i){
   } else if(e.type==="meal"){
     h+=fld("Name",inp(p+".name",e.name,"Restaurant"),true)+fld("Venue / area",inp(p+".venue",e.venue,"District"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
   } else if(e.type==="transport"){
-    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Line / service",inp(p+".line",e.line,"IC 522 / Line 2",true))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+connRows(e,i)+linkRows(e,i)+tail(e,i,true);
+    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Line / service",inp(p+".line",e.line,"IC 522 / Line 2",true))+'</div><div class="grid">'+fld("Direction",inp(p+".direction",e.direction,"towards Cais do Sodré"))+'<div></div></div<div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+connRows(e,i)+linkRows(e,i)+tail(e,i,true);
   } else if(e.type==="meeting"){
     h+=fld("Subject",inp(p+".name",e.name,"Meeting / task"),true)+fld("Location",inp(p+".location",e.location,"Office / video call"),true)+'<div class="grid three">'+fld("Date",dateF(p+".date",e.date))+fld("Start",timeF(p+".time",e.time))+fld("End",timeF(p+".endTime",e.endTime))+'</div>'+fld("With",inp(p+".withWhom",e.withWhom,"People / team"),true)+tail(e,i);
   } else if(e.type==="tour"){
@@ -971,6 +1112,9 @@ function renderForm(){
   h+=chk("showCosts",s.showCosts,"Show cost section");
   h+=chk("dayGrouped",s.dayGrouped,"Group journey into day headers");
   h+=chk("showSummaryPage",s.showSummaryPage,"Add an overview page (multi-traveler)");
+  h+='<div class="grid" style="margin-top:9px">'+fld("Paper size",sel("paper",state.paper||"letter",
+    Object.keys(PAPERS).map(k=>[k,PAPERS[k].label])))+'<div></div></div>';
+  h+='<div class="hint">The preview, print and PDF all follow this — a page in the preview is one sheet of whichever you pick.</div>';
   h+='<div class="sub-h">Money</div>';
   h+='<div class="grid">'+fld("Base currency",sel("baseCurrency",s.baseCurrency||"USD",CURRENCIES))+'<div></div></div>';
   h+=chk("splitShared",s.splitShared,"Split shared costs across travelers");
@@ -1015,6 +1159,7 @@ form.addEventListener("input",e=>{
   // Which currencies need a rate depends on the base and on each item's
   // currency, so that editor has to be rebuilt when either changes.
   if(path==="baseCurrency"||path.endsWith(".currency"))updateRates();
+  if(path==="paper")applyScale();
   maybePrefill(path,t.value,prevVal);
   updateSummary();schedulePreview();
 });
@@ -1159,7 +1304,7 @@ function getPath(root,path){
 }
 
 const SEEDS={
-  transport:()=>({type:"transport",owner:"shared",mode:"Train",line:"",from:"",to:"",date:"",time:"",connections:[],links:[],conf:"",cost:"",currency:"USD",note:""}),
+  transport:()=>({type:"transport",owner:"shared",mode:"Train",line:"",direction:"",from:"",to:"",date:"",time:"",connections:[],links:[],conf:"",cost:"",currency:"USD",note:""}),
   meeting:()=>({type:"meeting",owner:"shared",name:"",location:"",date:"",time:"",endTime:"",withWhom:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   tour:()=>({type:"tour",owner:"shared",name:"",place:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   note:()=>({type:"note",owner:"shared",title:"",body:"",date:"",time:""}),
@@ -1352,6 +1497,7 @@ function normalize(st){
     const t=String(en.connections==null?"":en.connections).trim();
     en.connections=t?[{place:t,wait:""}]:[];
   });
+  if(!own(PAPERS,o.paper))o.paper="letter";
   if(!o.titles.length)o.titles=["Destination"];
   if(!o.people.length)o.people=[{name:""}];
   if(!Array.isArray(o.footer)||o.footer.length<3)o.footer=(Array.isArray(o.footer)?o.footer:[]).concat(["","",""]).slice(0,3);
@@ -1419,7 +1565,7 @@ async function ensurePdfLibs(){
 function hiddenFrame(){
   var f=document.createElement("iframe");
   f.setAttribute("aria-hidden","true");
-  f.style.cssText="position:fixed;left:-10000px;top:0;width:816px;height:1200px;border:0;background:#fff";
+  f.style.cssText="position:fixed;left:-10000px;top:0;width:"+Math.ceil(paperDef().pxW)+"px;height:1200px;border:0;background:#fff";
   document.body.appendChild(f);
   return f;
 }
@@ -1471,14 +1617,15 @@ async function exportPDF(html){
     var jsPDF=window.jspdf.jsPDF;
     var SCALE=2,pdf=null;
     for(var i=0;i<pages.length;i++){
-      var opts={scale:SCALE,backgroundColor:"#ffffff",useCORS:true,logging:false,windowWidth:816,width:816};
-      if(exact)opts.height=PAGE_PXH;
+      var opts={scale:SCALE,backgroundColor:"#ffffff",useCORS:true,logging:false,windowWidth:Math.ceil(paperDef().pxW),width:Math.ceil(paperDef().pxW)};
+      if(exact)opts.height=paperDef().pxH;
       var canvas=await window.html2canvas(pages[i],opts);
       var img=canvas.toDataURL("image/jpeg",0.92);
-      var hpt=exact?PAGE_HPT:Math.min(PAGE_HPT,(canvas.height/SCALE)*0.75);  // css px -> pt (72/96)
-      if(!pdf)pdf=new jsPDF({unit:"pt",format:[PAGE_WPT,PAGE_HPT],orientation:"portrait"});
-      else pdf.addPage([PAGE_WPT,PAGE_HPT]);
-      pdf.addImage(img,"JPEG",0,0,PAGE_WPT,hpt);
+      var pg=paperDef();
+      var hpt=exact?pg.hpt:Math.min(pg.hpt,(canvas.height/SCALE)*0.75);  // css px -> pt (72/96)
+      if(!pdf)pdf=new jsPDF({unit:"pt",format:[pg.wpt,pg.hpt],orientation:"portrait"});
+      else pdf.addPage([pg.wpt,pg.hpt]);
+      pdf.addImage(img,"JPEG",0,0,pg.wpt,hpt);
     }
     var url=URL.createObjectURL(pdf.output("blob"));
     var w=window.open(url,"_blank");
@@ -1491,6 +1638,14 @@ async function exportPDF(html){
     if(btn){btn.textContent=label;btn.disabled=false;}
   }
 }
+document.getElementById("btnIcs").onclick=function(){
+  const blob=new Blob([buildICS()],{type:"text/calendar;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=slug((state.titles||[]).filter(Boolean).join("-"))+"-itinerary.ics";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+};
 document.getElementById("btnPdf").onclick=function(){exportPDF();};
 document.getElementById("btnPrint").onclick=function(){printDoc(buildDoc(state));};
 
