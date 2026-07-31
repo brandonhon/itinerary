@@ -253,7 +253,7 @@ function SAMPLE(){return {
     {label:"Porto Ribeira Suites",value:"+351 22 000 0000"},
     {label:"US Embassy Lisbon",value:"+351 21 727 3300"},
     {label:"Travel insurance",value:"Policy WX-4471 · +1 800 000 0000"},
-    {label:"ICE contact",value:"Jordan Rivera · +1 720 555 0148"}
+    {label:"Emergency contact",value:"Jordan Rivera · +1 720 555 0148"}
   ],
   footer:["All times local","WEST = UTC+1","Rev. 1 · Draft"]
 };}
@@ -1093,7 +1093,7 @@ function renderForm(){
 
   h+='<div class="sec"><h2>Reference <span class="ct">'+(s.emergency||[]).length+'</span></h2><div class="sbody">';
   (s.emergency||[]).forEach((x,i)=>{h+='<div class="card"><div class="card-h"><span class="tag" style="background:var(--muted)">Ref '+(i+1)+'</span><span class="sp"></span>'+ibtn("ref-up",i,"↑",null,i===0)+ibtn("ref-down",i,"↓",null,i===s.emergency.length-1)+ibtn("ref-del",i,"✕","del")+'</div><div class="grid">'+fld("Label",inp("emergency."+i+".label",x.label,"Hotel / consulate"))+fld("Value",inp("emergency."+i+".value",x.value,"Phone / policy"))+'</div></div>';});
-  h+='<div class="addrow"><button class="add" data-act="ref-add">+ Reference</button></div><div class="hint">Emergency numbers, consulate, insurance policy, ICE contact.</div></div></div>';
+  h+='<div class="addrow"><button class="add" data-act="ref-add">+ Reference</button></div><div class="hint">Emergency numbers, consulate, insurance policy, next of kin.</div></div></div>';
 
   h+='<div class="sec"><h2>Checklist <span class="ct">'+(s.checklist||[]).length+'</span></h2><div class="sbody">';
   h+=fld("First section heading",inp("checklistHeading",s.checklistHeading,"Before departure"),true);
