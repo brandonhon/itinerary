@@ -60,7 +60,15 @@ Alongside the journey you get a reference rail: confirmation numbers, a costed
 breakdown, a checklist, and emergency contacts.
 
 Flights take any number of connections — each one an airport and a layover, and
-they print on a single Via line. The checklist can hold more than one section:
+they print on a single Via line. Transport does the same for intermediate stops,
+since a train or bus route often has several, and it takes a list of links
+rather than one: a timetable, a station map and a booking can all sit on the
+same leg.
+
+Transport also names the service — `IC 522`, `Line 2` — which is its
+counterpart to a flight number, and any stop can be marked as a change rather
+than a call. A whole multi-line journey fits on one item: board the Red line,
+stay on through Saldanha, change to the Green line at Baixa-Chiado. The checklist can hold more than one section:
 add a section heading and every item below it belongs to that section, and cards
 can be dragged to reorder with a mouse, or moved with ↑/↓. On a touch screen
 the drag handle is hidden, because HTML5 drag-and-drop never fires from touch —

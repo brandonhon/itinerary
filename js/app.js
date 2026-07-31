@@ -142,9 +142,33 @@ function connList(e){
   const t=String(c||"").trim();
   return t?[{place:t,wait:""}]:[];
 }
+/* Transport can carry several links — a timetable, a station map, a booking —
+   so it uses a list where every other type still has one. A legacy single link
+   is migrated into the list by normalize(), so nothing is stranded. */
+function linkList(e){
+  const l=e&&e.links;
+  if(Array.isArray(l))return l.filter(x=>x&&typeof x==="object"&&safeUrl(x.url));
+  return [];
+}
+/* Anchors have to be built here rather than escaped as text, so both halves are
+   sanitised at the point of use: href through safeUrl, label through esc. */
+function linksHtml(e){
+  return linkList(e).map(x=>{
+    const href=safeUrl(x.url);
+    const label=String(x.label||"").trim()||href.replace(/^[a-z]+:\/\//i,"").replace(/\/.*$/,"");
+    return '<a href="'+esc(href)+'" style="color:inherit">'+esc(label)+'</a>';
+  }).join(" · ");
+}
+function firstLink(e){const l=linkList(e);return l.length?safeUrl(l[0].url):(e&&e.link)||"";}
 function connText(e){
-  return connList(e).map(c=>[String(c.place||"").trim(),String(c.wait||"").trim()]
-    .filter(Boolean).join(" · ")).filter(Boolean).join(" → ");
+  return connList(e).map(c=>{
+    const head=[String(c.place||"").trim(),String(c.wait||"").trim()].filter(Boolean).join(" · ");
+    const ch=String(c.change||"").trim();
+    /* A stop where you stay aboard reads "Coimbra-B · 5m"; one where you get
+       off and board something else says so, which is the whole difference
+       between a call and a change. */
+    return head?(ch?head+" · change to "+ch:head):(ch?"change to "+ch:"");
+  }).filter(Boolean).join(" → ");
 }
 function arrowize(s){return String(s||"").split(/\s*(?:,|→|->)\s*/).map(x=>x.trim()).filter(Boolean).join(" → ");}
 /* hm.tz is a zone name; hm.off is the older numeric offset, still honoured so
@@ -190,7 +214,7 @@ function SAMPLE(){return {
     {type:"meal",owner:"shared",name:"Dinner at Cervejaria Ramiro",venue:"Intendente",date:"2026-09-21",time:"20:00",link:"",conf:"",cost:"",currency:"EUR",note:"Seafood; expect a wait. Garlic prawns, then a steak sandwich to finish."},
     {type:"entertainment",owner:"shared",name:"Fado night at Tasca do Chico",venue:"Bairro Alto",date:"2026-09-22",time:"21:30",link:"",conf:"",cost:"",currency:"EUR",note:"Small room, arrive by 21:00 for a seat."},
     {type:"ground",owner:"shared",mode:"private",from:"Lisbon hotel",to:"Santa Apolónia station",date:"2026-09-24",time:"09:30",provider:"Welcome Pickups",link:"",conf:"",cost:"28.00",currency:"EUR",note:"Pre-booked car to the train."},
-    {type:"transport",owner:"shared",mode:"Train",from:"Lisbon (Santa Apolónia)",to:"Porto (Campanhã)",date:"2026-09-24",time:"10:30",provider:"CP · Alfa Pendular",link:"",conf:"",cost:"",currency:"EUR",note:"About 3h. Buy Conforto class for the quiet car."},
+    {type:"transport",owner:"shared",mode:"Train",line:"AP 130",from:"Lisbon (Santa Apolónia)",to:"Porto (Campanhã)",date:"2026-09-24",time:"10:30",connections:[{place:"Coimbra-B",wait:"5m"}],links:[{label:"CP timetable",url:"https://www.cp.pt/"}],conf:"",cost:"",currency:"EUR",note:"About 3h; buy Conforto class for the quiet car."},
     {type:"hotel",owner:"shared",name:"Porto Ribeira Suites",area:"Ribeira",address:"Rua da Fonte Taurina 18, Porto. Riverfront; walk to Ponte Luís I in five minutes.",checkIn:"2026-09-24",checkOut:"2026-09-27",link:"",conf:"PRS-4471",cost:"510.00",currency:"EUR",note:""},
     {type:"meal",owner:"shared",name:"Lunch at Cantina 32",venue:"Rua das Flores",date:"2026-09-25",time:"13:00",link:"",conf:"",cost:"",currency:"EUR",note:"Book a day ahead for the terrace."},
     {type:"activity",owner:"shared",name:"Douro Valley wine day",place:"Pinhão",date:"2026-09-26",time:"08:30",link:"",conf:"DV-2261",cost:"190.00",currency:"EUR",note:"Full-day tour: two quintas and a river cruise. Pickup from the hotel lobby."},
@@ -391,18 +415,29 @@ function nodesFor(e,id){
   if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
   if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
-  if(e.type==="transport"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",e.mode||"Transport",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
+  if(e.type==="transport"){
+    const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:firstLink(e)};
+    node.lines.push(L("badge",e.mode||"Transport",e.note||""));
+    if(String(e.line||"").trim())node.lines.push(L("key","Line",e.line,true,false));
+    {const via=connText(e);if(via)node.lines.push(L("key","Stops",via));}
+    {const lh=linksHtml(e);if(lh)node.lines.push({lead:"key",leadText:"Links",html:lh});}
+    return [node];
+  }
   if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Operator",e.provider));if(e.note)node.lines.push(L("none","",e.note));return [node];}
   if(e.type==="note"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.title||"Note",titleSmall:e.time||"",nodeFill:false,lines:[]};if(e.body)node.lines.push(L("none","",e.body));return [node];}
   const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("badge","Route",e.note));return [node];
 }
 function journeyNodes(list){let nodes=[];list.forEach((e,i)=>{nodesFor(e,"n"+i).forEach((n,k)=>{n._ord=i*10+k;nodes.push(n);});});nodes.sort((a,b)=>{const wa=a.when??Infinity,wb=b.when??Infinity;return wa-wb||a._ord-b._ord;});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===ff&&n.meta.end==="dep");if(idx>0){const [x]=nodes.splice(idx,1);nodes.unshift(x);}}if(lf){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===lf&&n.meta.end==="arr");if(idx>-1&&idx<nodes.length-1){const [x]=nodes.splice(idx,1);nodes.push(x);}}const pal=palette();nodes.forEach((n,i)=>{n.color=pal[i%pal.length];});return nodes;}
-function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}
+function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.line?" · "+e.line:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}
 
 /* ===== output ===== */
 function titleFont(len){if(len<=14)return 34;if(len<=20)return 29;if(len<=28)return 24;if(len<=38)return 20;if(len<=52)return 17;return 15;}
-function renderLine(ln){let lead="";if(ln.lead==="badge"&&ln.leadText)lead='<span class="pref">'+esc(ln.leadText)+'</span>';else if(ln.lead==="key"&&ln.leadText)lead='<span class="k">'+esc(ln.leadText)+'</span>';const body=ln.mono?'<span class="mono">'+inl(ln.text)+'</span>':inl(ln.text);return '<p'+(ln.alt?' class="alt"':'')+'>'+lead+body+'</p>';}
+function renderLine(ln){let lead="";if(ln.lead==="badge"&&ln.leadText)lead='<span class="pref">'+esc(ln.leadText)+'</span>';else if(ln.lead==="key"&&ln.leadText)lead='<span class="k">'+esc(ln.leadText)+'</span>';
+  /* ln.html is only ever set from linksHtml(), which sanitises both the href
+     and the label itself. Everything else still goes through inl(). */
+  const body=ln.html?ln.html:(ln.mono?'<span class="mono">'+inl(ln.text)+'</span>':inl(ln.text));
+  return '<p'+(ln.alt?' class="alt"':'')+'>'+lead+body+'</p>';}
 function renderNode(n){const fill=n.nodeFill?" node-fill":"";const small=n.titleSmall?' <small>'+esc(n.titleSmall)+'</small>':"";const href=safeUrl(n.link);const tt=href?'<a href="'+esc(href)+'" style="color:inherit;text-decoration:none">'+esc(n.title)+'</a>':esc(n.title);const det=n.lines.length?'\n        <div class="detail">'+n.lines.map(renderLine).join("\n        ")+'</div>':"";return '<div class="leg'+fill+'" style="--seg:'+n.color+'">\n        <div class="leg-head"><span class="stamp">'+esc(n.stamp)+'</span><span class="title">'+tt+small+'</span></div>'+det+'\n      </div>';}
 function dayHead(n,when){let lbl="Unscheduled";if(when!=null){const dt=new Date(when);lbl=WD[dt.getDay()]+" "+dt.getDate()+" "+MONT[dt.getMonth()];}return '<div class="dayhead"><span class="dn">Day '+n+'</span><span class="dd">'+esc(lbl)+'</span></div>';}
 function dayKey(when){if(when==null)return "u";const dt=new Date(when);return dt.getFullYear()+"-"+dt.getMonth()+"-"+dt.getDate();}
@@ -784,17 +819,45 @@ function ibtn(act,i,sym,cls,dis){
 }
 function ownerOpts(){return [["shared","Both / all travelers"]].concat(people().map((p,idx)=>[String(idx),p.name||("Traveler "+(idx+1))]));}
 
-function tail(e,i){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
+function tail(e,i,noLink){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';if(!noLink)h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
+/* Shared by flights and transport, which mean different things by it: a flight
+   changes vehicle at an airport, a train merely calls at a station. The wording
+   follows the type so a bus route never asks for an airport. */
+const CONN_WORDS={
+  flight:{head:"Connections / layovers",place:"Airport or place",placeHint:"EWR",
+          wait:"Layover",waitHint:"1h 40m",one:"connection"},
+  transport:{head:"Stops along the way",place:"Station or stop",placeHint:"Coimbra-B",
+             wait:"Wait",waitHint:"5m",one:"stop",
+             change:"Change to (leave blank if you stay on)",changeHint:"AP 130 / Green line"}
+};
 function connRows(e,i){
-  let h='<div class="sub-h">Connections / layovers</div>';
+  const w=own(CONN_WORDS,e.type)?CONN_WORDS[e.type]:CONN_WORDS.flight;
+  let h='<div class="sub-h">'+esc(w.head)+'</div>';
   connList(e).forEach((c,j)=>{
     const cp="entities."+i+".connections."+j;
-    h+='<div class="grid conn">'+fld("Airport or place",inp(cp+".place",c.place,"EWR"))+
-      fld("Layover",inp(cp+".wait",c.wait,"1h 40m"))+
+    h+='<div class="grid conn">'+fld(w.place,inp(cp+".place",c.place,w.placeHint))+
+      fld(w.wait,inp(cp+".wait",c.wait,w.waitHint))+
       '<button class="ic del" data-act="conn-del" data-i="'+i+'" data-j="'+j+'" aria-label="'+
-      esc("Delete connection "+(j+1))+'">✕</button></div>';
+      esc("Delete "+w.one+" "+(j+1))+'">✕</button></div>';
+    if(w.change)h+='<div class="conn-change">'+fld(w.change,inp(cp+".change",c.change,w.changeHint),true)+'</div>';
   });
-  h+='<div class="addrow"><button class="add" data-act="conn-add" data-i="'+i+'">+ Connection</button></div>';
+  h+='<div class="addrow"><button class="add" data-act="conn-add" data-i="'+i+'">+ '+
+    esc(w.one.charAt(0).toUpperCase()+w.one.slice(1))+'</button></div>';
+  return h;
+}
+function linkRows(e,i){
+  let h='<div class="sub-h">Links (Map / Booking)</div>';
+  /* The editor lists what is stored, not what renders: a row with a bad or
+     half-typed URL must still be visible so it can be fixed. */
+  const list=Array.isArray(e.links)?e.links:[];
+  list.forEach((x,j)=>{
+    const lp="entities."+i+".links."+j;
+    h+='<div class="grid conn">'+fld("Label",inp(lp+".label",x.label,"Timetable"))+
+      fld("URL",inp(lp+".url",x.url,"https://…"))+
+      '<button class="ic del" data-act="link-del" data-i="'+i+'" data-j="'+j+'" aria-label="'+
+      esc("Delete link "+(j+1))+'">✕</button></div>';
+  });
+  h+='<div class="addrow"><button class="add" data-act="link-add" data-i="'+i+'">+ Link</button></div>';
   return h;
 }
 function entityCard(e,i){
@@ -826,7 +889,7 @@ function entityCard(e,i){
   } else if(e.type==="meal"){
     h+=fld("Name",inp(p+".name",e.name,"Restaurant"),true)+fld("Venue / area",inp(p+".venue",e.venue,"District"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
   } else if(e.type==="transport"){
-    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Operator (opt.)",inp(p+".provider",e.provider,"Operator"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Line / service",inp(p+".line",e.line,"IC 522 / Line 2",true))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+connRows(e,i)+linkRows(e,i)+tail(e,i,true);
   } else if(e.type==="meeting"){
     h+=fld("Subject",inp(p+".name",e.name,"Meeting / task"),true)+fld("Location",inp(p+".location",e.location,"Office / video call"),true)+'<div class="grid three">'+fld("Date",dateF(p+".date",e.date))+fld("Start",timeF(p+".time",e.time))+fld("End",timeF(p+".endTime",e.endTime))+'</div>'+fld("With",inp(p+".withWhom",e.withWhom,"People / team"),true)+tail(e,i);
   } else if(e.type==="tour"){
@@ -1096,7 +1159,7 @@ function getPath(root,path){
 }
 
 const SEEDS={
-  transport:()=>({type:"transport",owner:"shared",mode:"Train",from:"",to:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
+  transport:()=>({type:"transport",owner:"shared",mode:"Train",line:"",from:"",to:"",date:"",time:"",connections:[],links:[],conf:"",cost:"",currency:"USD",note:""}),
   meeting:()=>({type:"meeting",owner:"shared",name:"",location:"",date:"",time:"",endTime:"",withWhom:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   tour:()=>({type:"tour",owner:"shared",name:"",place:"",date:"",time:"",provider:"",link:"",conf:"",cost:"",currency:"USD",note:""}),
   note:()=>({type:"note",owner:"shared",title:"",body:"",date:"",time:""}),
@@ -1198,6 +1261,17 @@ form.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;
   const act=b.getAttribute("data-act"),i=b.hasAttribute("data-i")?+b.getAttribute("data-i"):null,s=state;
   if(act==="export-person"){exportPDF(buildDocFor(i));return;}
+  if(act==="link-add"||act==="link-del"){
+    const en=(s.entities||[])[i];
+    if(!en)return;
+    if(!Array.isArray(en.links))en.links=[];
+    if(act==="link-add")en.links.push({label:"",url:""});
+    else{markUndo("delete link");en.links.splice(+b.getAttribute("data-j"),1);}
+    renderForm();
+    if(act==="link-add")focusNew("entities."+i+".links."+(en.links.length-1));
+    schedulePreview();
+    return;
+  }
   if(act==="conn-add"||act==="conn-del"){
     const en=(s.entities||[])[i];
     if(!en)return;
@@ -1269,6 +1343,11 @@ function normalize(st){
      entities.0.connections.0.wait would otherwise index into the string and
      throw "Cannot create property 'wait' on string 'E'". */
   o.entities.forEach(en=>{
+    /* Transport used to carry one link and an operator. The link is migrated
+       into the list so it is not stranded; the operator is gone by request. */
+    if(Array.isArray(en.links))en.links=en.links.filter(x=>x&&typeof x==="object");
+    else if(en.type==="transport"&&String(en.link||"").trim())en.links=[{label:"",url:en.link}];
+    else if("links" in en)en.links=[];
     if(Array.isArray(en.connections)){en.connections=en.connections.filter(c=>c&&typeof c==="object");return;}
     const t=String(en.connections==null?"":en.connections).trim();
     en.connections=t?[{place:t,wait:""}]:[];
