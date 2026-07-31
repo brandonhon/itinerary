@@ -131,6 +131,9 @@ h2:not(:first-child){margin-top:16px}
 .chk li{position:relative;padding-left:15px;font-size:10.5px;line-height:1.4;color:var(--ink-2);margin-bottom:6px}
 .chk li::before{content:"";position:absolute;left:0;top:3.5px;width:7px;height:7px;border:1.5px solid var(--faint);border-radius:1px}
 .chk b{font-weight:600;color:var(--ink)}
+/* The bold lead is its own line, with the detail beneath it — scanning a
+   checklist means reading the leads, not hunting for them mid-sentence. */
+.chk .lead{display:block;margin-bottom:1px}
 
 footer{margin-top:12px;padding-top:7px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);flex-shrink:0}
 footer .pgno{color:var(--muted);font-weight:600;white-space:nowrap}

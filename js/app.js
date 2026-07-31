@@ -500,7 +500,10 @@ function railChecklist(s){
   if(!secs.length)return "";
   return secs.map(sec=>{
     const items=sec.items.map(it=>{
-      const tb=it.title?'<b>'+inl(it.title)+'</b> ':"";
+      /* A distinct class, not a bare <b>: inl() also emits <b> for **bold**
+         inside the body, and a blanket rule would turn that inline emphasis
+         into block elements. */
+      const tb=it.title?'<b class="lead">'+inl(it.title)+'</b>':"";
       return '<li>'+tb+inl(it.body)+'</li>';
     }).join("\n        ");
     return '<h2>'+esc(sec.heading||"Checklist")+'</h2>\n      <ul class="chk">\n        '+items+'\n      </ul>';
