@@ -416,23 +416,28 @@ function tripCost(){
   return {rows:null,disp,sum,missing,any};
 }
 function tsmall(code,time,zone){const t=time?(time+(zone?" "+zone:"")):"";return [code,t].filter(Boolean).join(" · ");}
+/* One branch per item type, each written at a different time — which is how the
+   same field ended up rendered four different ways (a note labelled here, bare
+   there, riding a badge somewhere else). A cross-cutting rule has to be applied
+   to every branch and then asserted across all of them, not just the one that
+   prompted it. */
 function nodesFor(e,id){
   const L=(lead,leadText,text,mono,alt)=>({lead,leadText,text,mono:!!mono,alt:!!alt});
   if(e.type==="flight"){
     const dep={id:id+"d",when:toEpoch(e.departDate,e.departTime),stamp:fmtStamp(e.departDate),title:"Depart "+(e.originName||e.originCode||"—"),titleSmall:tsmall(e.originCode,e.departTime,e.departZone),nodeFill:true,lines:[],link:e.link,meta:{ff:e,end:"dep"}};
     if(e.carrier||e.flightNos)dep.lines.push(L("key",e.carrier||"Flight",arrowize(e.flightNos),true,false));
     {const via=connText(e);if(via)dep.lines.push(L("key","Via",via,false,false));}
-    if(e.note)dep.lines.push(L("key","Note",e.note,false,false));
     {const hl=homeLine(e.departDate,e.departTime,e.departOff);if(hl)dep.lines.push(L("key","Home",hl,false,true));}
+    if(e.note)dep.lines.push(L("key","Note",e.note,false,false));
     const arr={id:id+"a",when:toEpoch(e.arriveDate,e.arriveTime),stamp:fmtStamp(e.arriveDate),title:"Arrive "+(e.destName||e.destCode||"—"),titleSmall:tsmall(e.destCode,e.arriveTime,e.arriveZone),nodeFill:true,lines:[],meta:{ff:e,end:"arr"}};
     {const hl=homeLine(e.arriveDate,e.arriveTime,e.arriveOff);if(hl)arr.lines.push(L("key","Home",hl,false,true));}
     return [dep,arr];
   }
   if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);const node={id:id,when:toEpoch(e.checkIn,"15:00"),stamp:(dayNum(e.checkIn)&&dayNum(e.checkOut))?dayNum(e.checkIn)+" – "+dayNum(e.checkOut):fmtStamp(e.checkIn),title:e.name||"Hotel",titleSmall:[nt?nt+(nt===1?" night":" nights"):"",e.area].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.address)node.lines.push(L("none","",e.address));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="car"){const node={id:id,when:toEpoch(e.pickupDate,e.pickupTime),stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:e.pickupTime||"",nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",e.dropoffTime].filter(Boolean).join(" · ")));if(e.note)node.lines.push(L("none","",e.note));return [node];}
-  if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",e.note||""));if(e.provider)node.lines.push(L("key","Via",e.provider));return [node];}
-  if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
-  if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("none","",e.note));return [node];}
+  if(e.type==="car"){const node={id:id,when:toEpoch(e.pickupDate,e.pickupTime),stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:e.pickupTime||"",nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",e.dropoffTime].filter(Boolean).join(" · ")));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",""));if(e.provider)node.lines.push(L("key","Via",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="transport"){
     const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:firstLink(e)};
     node.lines.push(L("badge",e.mode||"Transport",""));
@@ -447,10 +452,13 @@ function nodesFor(e,id){
     if(String(e.note||"").trim())node.lines.push(L("key","Note",e.note));
     return [node];
   }
-  if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("none","",e.note));return [node];}
-  if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Operator",e.provider));if(e.note)node.lines.push(L("none","",e.note));return [node];}
+  if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Operator",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  /* A Note item's body is its content, not an annotation on something else, so
+     it stays unlabelled — a "Note" label under a heading that already says Note
+     would just be noise. */
   if(e.type==="note"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.title||"Note",titleSmall:e.time||"",nodeFill:false,lines:[]};if(e.body)node.lines.push(L("none","",e.body));return [node];}
-  const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("badge","Route",e.note));return [node];
+  const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];
 }
 function journeyNodes(list){let nodes=[];list.forEach((e,i)=>{nodesFor(e,"n"+i).forEach((n,k)=>{n._ord=i*10+k;nodes.push(n);});});nodes.sort((a,b)=>{const wa=a.when??Infinity,wb=b.when??Infinity;return wa-wb||a._ord-b._ord;});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===ff&&n.meta.end==="dep");if(idx>0){const [x]=nodes.splice(idx,1);nodes.unshift(x);}}if(lf){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===lf&&n.meta.end==="arr");if(idx>-1&&idx<nodes.length-1){const [x]=nodes.splice(idx,1);nodes.push(x);}}const pal=palette();nodes.forEach((n,i)=>{n.color=pal[i%pal.length];});return nodes;}
 function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.line?" · "+e.line:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}

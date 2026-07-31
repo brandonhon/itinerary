@@ -51,7 +51,9 @@ transport (train, ferry, bus, coach, shuttle), activities, tours, meals,
 entertainment, meetings, and freeform notes.
 
 The journey orders itself by date and time — you never sort anything by hand.
-It always opens with the first flight and closes with the last. Timeline colours
+It always opens with the first flight and closes with the last. Whatever the
+item, its note prints last, on its own labelled row, so the details above it
+stay scannable. Timeline colours
 are assigned automatically from the active theme.
 
 An item you have added but not filled in yet stays out of the document until it
@@ -72,8 +74,7 @@ counterpart to a flight number, along with a direction (`towards Cais do
 Sodré`), and any stop can be marked as a change rather than a call. A whole
 multi-line journey fits on one item: board the Red line, stay on through
 Saldanha, change to the Green line at Baixa-Chiado. Stops print one per line
-under a single heading rather than running together, and the note sits last on
-its own row. The checklist can hold more than one section:
+under a single heading rather than running together. The checklist can hold more than one section:
 add a section heading and every item below it belongs to that section, and cards
 can be dragged to reorder with a mouse, or moved with ↑/↓. On a touch screen
 the drag handle is hidden, because HTML5 drag-and-drop never fires from touch —
