@@ -1517,7 +1517,11 @@ async function shareLink(){const base=location.href.split("#")[0];const json=JSO
    throws inside renderForm(), which init() calls outside its try/catch — the
    form never renders and the tab is dead until the URL is cleared. */
 function normalize(st){
-  const b=BLANK(),o=Object.assign(b,st);
+  /* Spread rather than Object.assign: assign writes through [[Set]], so an own
+     "__proto__" key — which JSON.parse does produce — re-points this object's
+     prototype at attacker data instead of landing as an ordinary field. Spread
+     defines every key outright, so it cannot. */
+  const o={...BLANK(),...st};
   const arr=(k,objects)=>{o[k]=Array.isArray(o[k])?(objects?o[k].filter(x=>x&&typeof x==="object"):o[k]):[];};
   arr("entities",true);arr("checklist",true);arr("emergency",true);arr("people",true);arr("titles",false);
   /* Connections used to be one string. Coerce here rather than at render time:
