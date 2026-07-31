@@ -437,7 +437,10 @@ function nodesFor(e,id){
   if(e.type==="car"){const node={id:id,when:toEpoch(e.pickupDate,e.pickupTime),stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:e.pickupTime||"",nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",e.dropoffTime].filter(Boolean).join(" · ")));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",""));if(e.provider)node.lines.push(L("key","Via",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.time,e.venue].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  /* nodeFill:false here, as on hotels and notes, is deliberate de-emphasis —
+     not an oversight to be brought in line with the filled dots on tours and
+     entertainment. Confirmed 2026-07-31. */
+  if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="transport"){
     const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:firstLink(e)};
     node.lines.push(L("badge",e.mode||"Transport",""));
@@ -453,7 +456,7 @@ function nodesFor(e,id){
     return [node];
   }
   if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Operator",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Via",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   /* A Note item's body is its content, not an annotation on something else, so
      it stays unlabelled — a "Note" label under a heading that already says Note
      would just be noise. */
@@ -1035,7 +1038,7 @@ function entityCard(e,i){
   } else if(e.type==="car"){
     h+=fld("Company",inp(p+".company",e.company,"Hertz"),true)+'<div class="sub-h">Pick-up</div><div class="grid">'+fld("Place",inp(p+".pickupPlace",e.pickupPlace,"Airport"))+fld("Date",dateF(p+".pickupDate",e.pickupDate))+'</div><div class="grid">'+fld("Time",timeF(p+".pickupTime",e.pickupTime))+'<div></div></div><div class="sub-h">Drop-off</div><div class="grid">'+fld("Place",inp(p+".dropoffPlace",e.dropoffPlace,"Same"))+fld("Date",dateF(p+".dropoffDate",e.dropoffDate))+'</div><div class="grid">'+fld("Time",timeF(p+".dropoffTime",e.dropoffTime))+'<div></div></div>'+tail(e,i);
   } else if(e.type==="ground"){
-    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["taxi","Taxi"],["rideshare","Rideshare"],["private","Private car"]]))+fld("Provider (opt.)",inp(p+".provider",e.provider,"Uber / Grab"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Airport"))+fld("To",inp(p+".to",e.to,"Hotel"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["taxi","Taxi"],["rideshare","Rideshare"],["private","Private car"]]))+fld("Operator (opt.)",inp(p+".provider",e.provider,"Uber / Grab"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Airport"))+fld("To",inp(p+".to",e.to,"Hotel"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
   } else if(e.type==="entertainment"){
     h+=fld("Name",inp(p+".name",e.name,"Show / event"),true)+fld("Venue",inp(p+".venue",e.venue,"Venue"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
   } else if(e.type==="meal"){
@@ -1045,7 +1048,7 @@ function entityCard(e,i){
   } else if(e.type==="meeting"){
     h+=fld("Subject",inp(p+".name",e.name,"Meeting / task"),true)+fld("Location",inp(p+".location",e.location,"Office / video call"),true)+'<div class="grid three">'+fld("Date",dateF(p+".date",e.date))+fld("Start",timeF(p+".time",e.time))+fld("End",timeF(p+".endTime",e.endTime))+'</div>'+fld("With",inp(p+".withWhom",e.withWhom,"People / team"),true)+tail(e,i);
   } else if(e.type==="tour"){
-    h+=fld("Name",inp(p+".name",e.name,"Tour / excursion"),true)+fld("Meeting point",inp(p+".place",e.place,"Where to meet"),true)+'<div class="grid">'+fld("Operator",inp(p+".provider",e.provider,"Operator"))+'<div></div></div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Tour / excursion"),true)+fld("Meeting point",inp(p+".place",e.place,"Where to meet"),true)+'<div class="grid">'+fld("Operator (opt.)",inp(p+".provider",e.provider,"Quinta Tours"))+'<div></div></div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
   } else if(e.type==="note"){
     h+=fld("Title",inp(p+".title",e.title,"Reminder"),true)+fld("Body",area(p+".body",e.body,"Detail…"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>';
   } else {
