@@ -40,7 +40,7 @@ tab won't lose it.
 | **Save data** | Downloads the trip as JSON |
 | **Load data** | Restores a JSON file |
 | **Print** | Sends the paginated pages to the browser's print dialog |
-| **Calendar** | Downloads the trip as an `.ics` you can import into any calendar |
+| **Calendar** | Downloads the whole trip as an `.ics`; per-traveler calendars are under **Sharing & export** |
 | **Export PDF** | Builds a PDF and opens it in a new tab |
 | **Edit this trip** | Phones only, on a shared link — swaps the reading view for the full builder |
 
@@ -221,8 +221,14 @@ the events you already imported instead of giving you a second copy of the whole
 trip. Changing an item's type, date or title does mint a new UID, so that one
 item will arrive as a new event.
 
-The file covers the whole trip rather than one traveler, since a calendar is
-personal and unwanted events are easy to delete.
+The toolbar button exports the whole trip. On a multi-traveler trip, **Sharing
+& export** also offers one calendar per traveler — their own items plus
+everything shared, the same split their printed pages use — so each person can
+import a file without the other's flights in it.
+
+A shared event keeps the same identity in every file it appears in, so
+importing one traveler's calendar alongside another's, or alongside the whole
+trip, updates those events rather than making a second copy.
 
 ## Sharing
 

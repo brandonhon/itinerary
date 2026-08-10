@@ -1011,12 +1011,16 @@ function icsDetail(e){
   if(e.link&&safeUrl(e.link))bits.push(safeUrl(e.link));
   return bits.join("\n");
 }
-function buildICS(){
+/* Whoever is asked for: the whole trip by default, or one traveler's own items
+   plus everything shared — the same split their printed pages use. A shared
+   item keeps the same UID in every file, so importing a traveler's calendar
+   alongside the group's updates those events rather than doubling them. */
+function buildICS(only,who){
   const stamp=icsUTC(Date.now());
   const host=(location.hostname||"itinerary").replace(/[^\w.-]/g,"");
   const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Itinerary Builder//EN","CALSCALE:GREGORIAN",
-    "X-WR-CALNAME:"+icsEsc(docTitle()||"Itinerary")];
-  const list=ents().filter(hasContent);
+    "X-WR-CALNAME:"+icsEsc([docTitle()||"Itinerary",who].filter(Boolean).join(" · "))];
+  const list=(only||ents()).filter(hasContent);
   /* The same resolution the printed page uses, so the two cannot disagree about
      when something happens. */
   const M=instants(list);
@@ -1366,7 +1370,12 @@ function renderForm(){
 
   h+='<div class="sec"><h2>Sharing & export</h2><div class="sbody">';
   h+='<div class="hint">Use “Copy link” in the toolbar for a self-contained link with the whole trip embedded in the URL.</div>';
-  if(multi()){h+='<div class="sub-h">Export one traveler</div><div class="addrow">'+people().map((p,i)=>'<button class="add" data-act="export-person" data-i="'+i+'">PDF · '+esc(p.name||("Traveler "+(i+1)))+'</button>').join("")+'</div>';}
+  if(multi()){
+    h+='<div class="sub-h">Export one traveler</div><div class="addrow">'+people().map((p,i)=>'<button class="add" data-act="export-person" data-i="'+i+'">PDF · '+esc(p.name||("Traveler "+(i+1)))+'</button>').join("")+'</div>';
+    h+='<div class="sub-h">Calendar</div><div class="addrow">'+people().map((p,i)=>'<button class="add" data-act="ics-person" data-i="'+i+'">ICS · '+esc(p.name||("Traveler "+(i+1)))+'</button>').join("")+
+      '<button class="add" data-act="ics-all">ICS · Everyone</button></div>';
+    h+='<div class="hint">A traveler’s calendar carries their own items plus everything shared, matching their printed pages. Shared events keep the same identity in every file, so importing one traveler’s calendar alongside another’s updates them rather than making a second copy. “Everyone” is the same file the toolbar’s Calendar button produces.</div>';
+  }
   h+='</div></div>';
 
   h+='<div class="sec"><h2>Footer</h2><div class="sbody"><div class="grid one">'+fld("Left",inp("footer.0",s.footer[0],"All times local"))+fld("Center",inp("footer.1",s.footer[1],"Zone note"))+fld("Right",inp("footer.2",s.footer[2],"Rev. 1"))+'</div></div></div>';
@@ -1650,6 +1659,8 @@ form.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;
   const act=b.getAttribute("data-act"),i=b.hasAttribute("data-i")?+b.getAttribute("data-i"):null,s=state;
   if(act==="export-person"){exportPDF(buildDocFor(i));return;}
+  if(act==="ics-person"){const pp=people()[i];downloadICS(listFor(i),(pp&&pp.name)||("Traveler "+(i+1)));return;}
+  if(act==="ics-all"){downloadICS(null,"");return;}
   if(act==="link-add"||act==="link-del"){
     const en=(s.entities||[])[i];
     if(!en)return;
@@ -1886,14 +1897,19 @@ async function exportPDF(html){
     if(btn){btn.textContent=label;btn.disabled=false;}
   }
 }
-document.getElementById("btnIcs").onclick=function(){
-  const blob=new Blob([buildICS()],{type:"text/calendar;charset=utf-8"});
+function icsFileName(who){
+  const base=slug((state.titles||[]).filter(Boolean).join("-"))+"-itinerary";
+  return (who?base+"-"+slug(who):base)+".ics";
+}
+function downloadICS(only,who){
+  const blob=new Blob([buildICS(only,who)],{type:"text/calendar;charset=utf-8"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download=slug((state.titles||[]).filter(Boolean).join("-"))+"-itinerary.ics";
+  a.download=icsFileName(who);
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-};
+}
+document.getElementById("btnIcs").onclick=function(){downloadICS(null,"");};
 document.getElementById("btnPdf").onclick=function(){exportPDF();};
 document.getElementById("btnPrint").onclick=function(){printDoc(buildDoc(state));};
 
