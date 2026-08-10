@@ -121,14 +121,13 @@ function parseISO(iso){const p=String(iso||"").split("-");return [(+p[0]),(+p[1]
 function toEpoch(iso,tm){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y||!m||!d)return null;let hh=0,mm=0;if(tm){const t=tm.split(":");hh=+t[0]||0;mm=+t[1]||0;}return new Date(y,m-1,d,hh,mm).getTime();}
 function dow(iso){const [y,m,d]=parseISO(iso);if(!y)return null;return new Date(y,m-1,d).getDay();}
 function fmtStamp(iso){const w=dow(iso);if(w==null)return "";return WD[w]+" "+parseISO(iso)[2];}
-function dayNum(iso){const d=parseISO(iso)[2];return d?String(d):"";}
 function nightsBetween(a,b){const ea=toEpoch(a),eb=toEpoch(b);if(ea==null||eb==null)return 0;const n=Math.round((eb-ea)/86400000);return n>0?n:0;}
 /* Month is only range-checked here: hand-edited JSON and share links can carry
    anything, and an out-of-range index printed the literal word "undefined"
    into the document ("1 – 5 undefined 2026"). */
 function fmtLong(iso){const [y,m,d]=parseISO(iso);if(!y||!d||!MON[m-1])return "";return d+" "+MON[m-1]+" "+y;}
 function fmtRange(a,b){const [ay,am,ad]=parseISO(a),[by,bm,bd]=parseISO(b);if(!ay||!MON[am-1])return fmtLong(b);if(!by||!MON[bm-1])return fmtLong(a);if(ay===by&&am===bm)return ad+" – "+bd+" "+MON[am-1]+" "+ay;if(ay===by)return ad+" "+MON[am-1]+" – "+bd+" "+MON[bm-1]+" "+ay;return ad+" "+MON[am-1]+" "+ay+" – "+bd+" "+MON[bm-1]+" "+by;}
-function epUTC(iso,tm,off){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y)return null;let hh=0,mm=0;if(tm){const t=tm.split(":");hh=+t[0]||0;mm=+t[1]||0;}let ms=Date.UTC(y,m-1,d,hh,mm);if(off!==""&&off!=null&&!isNaN(+off))ms-=(+off)*60000;return ms;}
+function epUTC(iso,tm,off){if(!iso)return null;const [y,m,d]=parseISO(iso);if(!y)return null;let hh=0,mm=0;if(tm){const t=tm.split(":");hh=+t[0]||0;mm=+t[1]||0;}let ms=Date.UTC(y,m-1,d,hh,mm);if(offKnown(off))ms-=(+off)*60000;return ms;}
 function elapsedStr(f){const a=epUTC(f.departDate,f.departTime,f.departOff),b=epUTC(f.arriveDate,f.arriveTime,f.arriveOff);if(a==null||b==null)return "";let mins=Math.round((b-a)/60000);if(mins<0)return "";const approx=(f.departOff===""||f.arriveOff===""||f.departOff==null||f.arriveOff==null);const h=Math.floor(mins/60),mm=mins%60;return (approx?"~":"")+h+"h "+String(mm).padStart(2,"0")+"m";}
 function num(x){const n=parseFloat(String(x==null?"":x).replace(/[, ]/g,""));return isNaN(n)?0:n;}
 function money(cur,n){const s=own(SYM,cur)?SYM[cur]:(cur?cur+" ":"");const dec=(cur==="JPY"||cur==="KRW")?0:2;return s+Number(n).toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec});}
@@ -218,15 +217,16 @@ function SAMPLE(){return {
   entities:[
     {type:"flight",owner:"0",carrier:"United",flightNos:"UA0918, UA1450",originCode:"DEN",originName:"Denver",departDate:"2026-09-18",departTime:"16:20",departOff:"-360",departZone:"MDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"11:05",arriveOff:"60",arriveZone:"WEST",connections:[{place:"EWR",wait:"1h 40m"}],link:"",conf:"UA7Q2LM",cost:"1180.44",currency:"USD",note:"Overnight transatlantic."},
     {type:"flight",owner:"1",carrier:"Delta",flightNos:"DL0244, DL0118",originCode:"SEA",originName:"Seattle",departDate:"2026-09-18",departTime:"13:10",departOff:"-420",departZone:"PDT",destCode:"LIS",destName:"Lisbon",arriveDate:"2026-09-19",arriveTime:"12:50",arriveOff:"60",arriveZone:"WEST",connections:[{place:"JFK",wait:"2h 05m"}],link:"",conf:"DLK83RP",cost:"1342.90",currency:"USD",note:""},
-    {type:"hotel",owner:"shared",name:"Hotel Baixa Terrace",area:"Baixa",address:"Rua Áurea 121, Lisbon. Steps from Praça do Comércio; Baixa-Chiado Metro two blocks north.",checkIn:"2026-09-19",checkOut:"2026-09-24",link:"https://maps.google.com/?q=Rua+Aurea+121+Lisbon",conf:"BTL-99120",cost:"940.00",currency:"EUR",note:""},
+    {type:"hotel",owner:"shared",name:"Hotel Baixa Terrace",area:"Baixa",address:"Rua Áurea 121, Lisbon. Steps from Praça do Comércio; Baixa-Chiado Metro two blocks north.",checkIn:"2026-09-19",checkInTime:"15:00",checkOut:"2026-09-24",link:"https://maps.google.com/?q=Rua+Aurea+121+Lisbon",conf:"BTL-99120",cost:"940.00",currency:"EUR",note:""},
     {type:"activity",owner:"shared",name:"Tram 28 & Alfama walk",place:"Martim Moniz stop",date:"2026-09-20",time:"10:00",link:"",conf:"",cost:"",currency:"EUR",note:"Board early to beat the queue; ride to Alfama, then wander down to the cathedral."},
     {type:"meal",owner:"shared",name:"Dinner at Cervejaria Ramiro",venue:"Intendente",date:"2026-09-21",time:"20:00",link:"",conf:"",cost:"",currency:"EUR",note:"Seafood; expect a wait. Garlic prawns, then a steak sandwich to finish."},
     {type:"entertainment",owner:"shared",name:"Fado night at Tasca do Chico",venue:"Bairro Alto",date:"2026-09-22",time:"21:30",link:"",conf:"",cost:"",currency:"EUR",note:"Small room, arrive by 21:00 for a seat."},
-    {type:"ground",owner:"shared",mode:"private",from:"Lisbon hotel",to:"Santa Apolónia station",date:"2026-09-24",time:"09:30",provider:"Welcome Pickups",link:"",conf:"",cost:"28.00",currency:"EUR",note:"Pre-booked car to the train."},
-    {type:"transport",owner:"shared",mode:"Train",line:"AP 130",from:"Lisbon (Santa Apolónia)",to:"Porto (Campanhã)",date:"2026-09-24",time:"10:30",connections:[{place:"Coimbra-B",wait:"5m"}],links:[{label:"CP timetable",url:"https://www.cp.pt/"}],conf:"",cost:"",currency:"EUR",note:"About 3h; buy Conforto class for the quiet car."},
+    {type:"ground",owner:"shared",mode:"private",from:"Lisbon hotel",to:"Santa Apolónia station",date:"2026-09-24",time:"09:30",off:"60",zone:"WEST",provider:"Welcome Pickups",link:"",conf:"",cost:"28.00",currency:"EUR",note:"Pre-booked car to the train."},
+    {type:"transport",owner:"shared",mode:"Train",line:"AP 130",from:"Lisbon (Santa Apolónia)",to:"Porto (Campanhã)",date:"2026-09-24",time:"10:30",off:"60",zone:"WEST",connections:[{place:"Coimbra-B",wait:"5m"}],links:[{label:"CP timetable",url:"https://www.cp.pt/"}],conf:"",cost:"",currency:"EUR",note:"About 3h; buy Conforto class for the quiet car."},
+    {type:"car",owner:"shared",company:"Europcar",pickupPlace:"Porto (Campanhã)",pickupDate:"2026-09-24",pickupTime:"14:00",dropoffPlace:"Porto airport (OPO)",dropoffDate:"2026-09-27",dropoffTime:"11:00",off:"60",zone:"WEST",link:"",conf:"EC-70318",cost:"165.00",currency:"EUR",note:"Compact; free cancellation up to 48h before."},
     {type:"hotel",owner:"shared",name:"Porto Ribeira Suites",area:"Ribeira",address:"Rua da Fonte Taurina 18, Porto. Riverfront; walk to Ponte Luís I in five minutes.",checkIn:"2026-09-24",checkOut:"2026-09-27",link:"",conf:"PRS-4471",cost:"510.00",currency:"EUR",note:""},
     {type:"meal",owner:"shared",name:"Lunch at Cantina 32",venue:"Rua das Flores",date:"2026-09-25",time:"13:00",link:"",conf:"",cost:"",currency:"EUR",note:"Book a day ahead for the terrace."},
-    {type:"activity",owner:"shared",name:"Douro Valley wine day",place:"Pinhão",date:"2026-09-26",time:"08:30",link:"",conf:"DV-2261",cost:"190.00",currency:"EUR",note:"Full-day tour: two quintas and a river cruise. Pickup from the hotel lobby."},
+    {type:"tour",owner:"shared",name:"Douro Valley wine day",place:"Pinhão",date:"2026-09-26",time:"08:30",off:"60",zone:"WEST",provider:"Quinta Tours",link:"",conf:"DV-2261",cost:"190.00",currency:"EUR",note:"Full-day tour: two quintas and a river cruise. Pickup from the hotel lobby."},
     {type:"meeting",owner:"0",name:"Client sync — Porto office",location:"Boavista · video optional",date:"2026-09-25",time:"09:30",endTime:"10:30",withWhom:"Regional team",link:"",conf:"",cost:"",currency:"USD",note:"Keep it short; join from the hotel if the walk runs late."},
     {type:"note",owner:"shared",title:"Reconfirm Douro pickup",body:"Call the operator the evening before to confirm the 08:30 hotel pickup.",date:"2026-09-25",time:"18:00"},
     {type:"meal",owner:"shared",name:"Lunch at Time Out Market",venue:"Cais do Sodré",date:"2026-09-20",time:"13:30",link:"",conf:"",cost:"",currency:"EUR",note:"Grab a shared table; try the Marlene Vieira stall."},
@@ -312,7 +312,7 @@ function isShared(e){return e.owner==null||e.owner==="shared";}
    seeding a date on an empty card would resurrect it and, because the seed is
    the trip start, park it at the very top. The card stays in the form; it just
    does not reach the page until it says something. */
-const NOT_CONTENT=/^(type|owner|currency|mode|date|time|endTime|departDate|departTime|arriveDate|arriveTime|checkIn|checkOut|pickupDate|pickupTime|dropoffDate|dropoffTime)$/;
+const NOT_CONTENT=/^(type|owner|currency|mode|off|zone|date|time|endTime|departDate|departTime|arriveDate|arriveTime|checkIn|checkInTime|checkOut|pickupDate|pickupTime|dropoffDate|dropoffTime)$/;
 function hasContent(e){
   if(!e||typeof e!=="object")return false;
   for(const k of Object.keys(e)){
@@ -328,14 +328,25 @@ function hasContent(e){
 }
 function listFor(idx){return multi()?ents().filter(e=>{const o=(e.owner==null?"shared":String(e.owner));return o==="shared"||o===String(idx);}):ents();}
 function flightsIn(list){return list.filter(e=>e.type==="flight");}
-function firstFlight(list){const f=flightsIn(list).slice().sort((a,b)=>(toEpoch(a.departDate,a.departTime)??Infinity)-(toEpoch(b.departDate,b.departTime)??Infinity));return f[0]||null;}
-function lastFlight(list){const f=flightsIn(list).slice().sort((a,b)=>(toEpoch(a.arriveDate,a.arriveTime)??-Infinity)-(toEpoch(b.arriveDate,b.arriveTime)??-Infinity));return f[f.length-1]||null;}
+function firstFlight(list){const m=instants(list),f=flightsIn(list).slice().sort((a,b)=>(instEnd(m,a,"dep")??Infinity)-(instEnd(m,b,"dep")??Infinity));return f[0]||null;}
+function lastFlight(list){const m=instants(list),f=flightsIn(list).slice().sort((a,b)=>(instEnd(m,a,"arr")??-Infinity)-(instEnd(m,b,"arr")??-Infinity));return f[f.length-1]||null;}
 function totalNights(list){let n=0;list.forEach(e=>{if(e.type==="hotel")n+=nightsBetween(e.checkIn,e.checkOut);});if(n===0&&state.tripStart&&state.tripEnd)n=nightsBetween(state.tripStart,state.tripEnd);return n;}
 function routeLine(list){const f=firstFlight(list);if(!f||!f.originCode||!f.destCode)return "";const lf=lastFlight(list);const home=f.originCode;const round=lf&&lf.destCode===home;const n=totalNights(list);return home+" "+(round?"⇄":"→")+" "+f.destCode+(n?" · "+n+" nights":"");}
 function dateRangeStr(){const a=state.tripStart,b=state.tripEnd;if(!a&&!b)return "";if(a&&!b)return fmtLong(a);if(!a&&b)return fmtLong(b);return fmtRange(a,b);}
 function statList(list){const out=[];const n=totalNights(list);if(n)out.push({v:String(n),l:"Nights"});const h=list.filter(e=>e.type==="hotel").length;if(h)out.push({v:String(h),l:h===1?"Hotel":"Hotels"});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const e=elapsedStr(ff);if(e)out.push({v:e,l:"Outbound"});}if(lf&&lf!==ff){const e=elapsedStr(lf);if(e)out.push({v:e,l:"Return"});}return out;}
-function primaryWhen(e){if(e.type==="flight")return toEpoch(e.departDate,e.departTime);if(e.type==="hotel")return toEpoch(e.checkIn,"15:00");if(e.type==="car")return toEpoch(e.pickupDate,e.pickupTime);return toEpoch(e.date,e.time);}
-function labelFor(e){if(e.type==="flight")return (e.carrier||"Air")+(e.originCode&&e.destCode?" "+e.originCode+"–"+e.destCode:"");if(e.type==="hotel")return e.name||"Hotel";if(e.type==="car")return "Rental"+(e.company?" · "+e.company:"");if(e.type==="ground")return (own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.to?" · "+e.to:"");if(e.type==="transport")return (e.mode||"Transport")+(e.to?" · "+e.to:"");return e.name||(own(TYPES,e.type)?TYPES[e.type].label:"")||"Item";}
+/* A hotel with no stated check-in time is assumed to be mid-afternoon, which is
+   only a guess — and a wrong one against a flight that lands at 15:55, which is
+   how a hotel card came to print above the arrival that brought you to it. The
+   card can now say when, and this is only the fallback. */
+const HOTEL_CHECKIN="15:00";
+/* Printed only when it is a real clock time — "25:99" is not one, and left
+   unchecked it both printed itself and rolled the hotel into the next day,
+   because Date(y,m,d,25,99) quietly normalises. The sort still falls back. */
+function checkInShown(e){const t=String(e.checkInTime||"").trim(),m=/^(\d{1,2}):(\d{2})$/.exec(t);return (m&&+m[1]<24&&+m[2]<60)?t:"";}
+function checkInAt(e){return checkInShown(e)||HOTEL_CHECKIN;}
+/* The one date that identifies an item, whatever its type calls the field. */
+function dateOf(e){return e.type==="flight"?e.departDate:e.type==="hotel"?e.checkIn:e.type==="car"?e.pickupDate:e.date;}
+function labelFor(e){if(e.type==="flight")return (e.carrier||"Air")+(e.originCode&&e.destCode?" "+e.originCode+"–"+e.destCode:"");if(e.type==="hotel")return e.name||"Hotel";if(e.type==="car")return "Rental"+(e.company?" · "+e.company:"");if(e.type==="ground")return (own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.to?" · "+e.to:"");if(e.type==="transport")return (e.mode||"Transport")+(e.to?" · "+e.to:"");return e.name||e.title||(own(TYPES,e.type)?TYPES[e.type].label:"")||"Item";}
 
 /* Reference rates, vendored under data/ and refreshed weekly by CI, so the page
    still talks to no third party while it runs. Loaded once, in the background:
@@ -415,7 +426,12 @@ function tripCost(){
   });
   return {rows:null,disp,sum,missing,any};
 }
-function tsmall(code,time,zone){const t=time?(time+(zone?" "+zone:"")):"";return [code,t].filter(Boolean).join(" · ");}
+/* One place decides how a clock time is written, so a taxi reads "05:35 HKT"
+   exactly the way a flight leg reads "18:01 CDT". Before this only flights
+   carried a zone and everything else printed a bare time, which on a trip
+   spanning two continents said nothing about which continent. */
+function atTime(tm,zone){const t=String(tm||"").trim();if(!t)return "";const z=String(zone||"").trim();return z?t+" "+z:t;}
+function tsmall(code,time,zone){return [code,atTime(time,zone)].filter(Boolean).join(" · ");}
 /* One branch per item type, each written at a different time — which is how the
    same field ended up rendered four different ways (a note labelled here, bare
    there, riding a badge somewhere else). A cross-cutting rule has to be applied
@@ -423,26 +439,35 @@ function tsmall(code,time,zone){const t=time?(time+(zone?" "+zone:"")):"";return
    prompted it. */
 function nodesFor(e,id){
   const L=(lead,leadText,text,mono,alt)=>({lead,leadText,text,mono:!!mono,alt:!!alt});
+  /* Every timed item can now say which zone its clock is in, so the home-time
+     line is no longer a flight-only courtesy — a taxi at 05:35 in Hong Kong is
+     16:35 the previous afternoon at home, and that is worth saying on any row
+     that knows its offset. */
+  const home=(node,dateIso,tm,off)=>{const hl=homeLine(dateIso,tm,off);if(hl)node.lines.push(L("key","Home",hl,false,true));};
   if(e.type==="flight"){
-    const dep={id:id+"d",when:toEpoch(e.departDate,e.departTime),stamp:fmtStamp(e.departDate),title:"Depart "+(e.originName||e.originCode||"—"),titleSmall:tsmall(e.originCode,e.departTime,e.departZone),nodeFill:true,lines:[],link:e.link,meta:{ff:e,end:"dep"}};
+    const dep={id:id+"d",date:e.departDate,stime:e.departTime,off:e.departOff,stamp:fmtStamp(e.departDate),title:"Depart "+(e.originName||e.originCode||"—"),titleSmall:tsmall(e.originCode,e.departTime,e.departZone),nodeFill:true,lines:[],link:e.link,meta:{ff:e,end:"dep"}};
     if(e.carrier||e.flightNos)dep.lines.push(L("key",e.carrier||"Flight",arrowize(e.flightNos),true,false));
     {const via=connText(e);if(via)dep.lines.push(L("key","Via",via,false,false));}
-    {const hl=homeLine(e.departDate,e.departTime,e.departOff);if(hl)dep.lines.push(L("key","Home",hl,false,true));}
+    home(dep,e.departDate,e.departTime,e.departOff);
     if(e.note)dep.lines.push(L("key","Note",e.note,false,false));
-    const arr={id:id+"a",when:toEpoch(e.arriveDate,e.arriveTime),stamp:fmtStamp(e.arriveDate),title:"Arrive "+(e.destName||e.destCode||"—"),titleSmall:tsmall(e.destCode,e.arriveTime,e.arriveZone),nodeFill:true,lines:[],meta:{ff:e,end:"arr"}};
-    {const hl=homeLine(e.arriveDate,e.arriveTime,e.arriveOff);if(hl)arr.lines.push(L("key","Home",hl,false,true));}
+    const arr={id:id+"a",date:e.arriveDate,stime:e.arriveTime,off:e.arriveOff,stamp:fmtStamp(e.arriveDate),title:"Arrive "+(e.destName||e.destCode||"—"),titleSmall:tsmall(e.destCode,e.arriveTime,e.arriveZone),nodeFill:true,lines:[],meta:{ff:e,end:"arr"}};
+    home(arr,e.arriveDate,e.arriveTime,e.arriveOff);
     return [dep,arr];
   }
-  if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);const node={id:id,when:toEpoch(e.checkIn,"15:00"),stamp:(dayNum(e.checkIn)&&dayNum(e.checkOut))?dayNum(e.checkIn)+" – "+dayNum(e.checkOut):fmtStamp(e.checkIn),title:e.name||"Hotel",titleSmall:[nt?nt+(nt===1?" night":" nights"):"",e.area].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.address)node.lines.push(L("none","",e.address));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="car"){const node={id:id,when:toEpoch(e.pickupDate,e.pickupTime),stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:e.pickupTime||"",nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",e.dropoffTime].filter(Boolean).join(" · ")));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="ground"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:e.time||"",nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",""));if(e.provider)node.lines.push(L("key","Via",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="entertainment"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  /* The stamp is the check-in day in the same "Fri 14" form every other row
+     uses; the checkout gets its own line, the way a rental car's drop-off does.
+     It used to be a bare "13 – 20", which was the only date on the page written
+     without a weekday — and, spanning a month end, without a month either. */
+  if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);const node={id:id,date:e.checkIn,stime:checkInAt(e),off:"",stamp:fmtStamp(e.checkIn),title:e.name||"Hotel",titleSmall:[atTime(checkInShown(e),""),nt?nt+(nt===1?" night":" nights"):"",e.area].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.address)node.lines.push(L("none","",e.address));if(e.checkOut)node.lines.push(L("key","Check-out",fmtStamp(e.checkOut)));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="car"){const node={id:id,date:e.pickupDate,stime:e.pickupTime,off:e.off,stamp:fmtStamp(e.pickupDate),title:"Rental car"+(e.company?" · "+e.company:""),titleSmall:atTime(e.pickupTime,e.zone),nodeFill:true,lines:[],link:e.link};if(e.pickupPlace)node.lines.push(L("key","Pick-up",e.pickupPlace));if(e.dropoffPlace||e.dropoffDate)node.lines.push(L("key","Drop-off",[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",atTime(e.dropoffTime,e.zone)].filter(Boolean).join(" · ")));home(node,e.pickupDate,e.pickupTime,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="ground"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transfer"),titleSmall:atTime(e.time,e.zone),nodeFill:true,lines:[],link:e.link};node.lines.push(L("badge",own(MODE,e.mode)?MODE[e.mode]:"Taxi",""));if(e.provider)node.lines.push(L("key","Via",e.provider));home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="entertainment"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.name||"Entertainment",titleSmall:[e.venue,atTime(e.time,e.zone)].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   /* nodeFill:false here, as on hotels and notes, is deliberate de-emphasis —
      not an oversight to be brought in line with the filled dots on tours and
      entertainment. Confirmed 2026-07-31. */
-  if(e.type==="meal"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.venue,e.time].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="meal"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.name||"Meal",titleSmall:[e.venue,atTime(e.time,e.zone)].filter(Boolean).join(" · "),nodeFill:false,lines:[],link:e.link};home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   if(e.type==="transport"){
-    const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:e.time||"",nodeFill:true,lines:[],link:firstLink(e)};
+    const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:(e.from&&e.to)?e.from+" → "+e.to:(e.from||e.to||"Transport"),titleSmall:atTime(e.time,e.zone),nodeFill:true,lines:[],link:firstLink(e)};
     node.lines.push(L("badge",e.mode||"Transport",""));
     if(String(e.line||"").trim())node.lines.push(L("key","Line",e.line,true,false));
     if(String(e.direction||"").trim())node.lines.push(L("key","Direction",e.direction));
@@ -451,20 +476,114 @@ function nodesFor(e,id){
     connLines(e).forEach((t,idx)=>node.lines.push(
       idx===0?L("key","Stops",t):{lead:"key",cont:true,text:t}));
     {const lh=linksHtml(e);if(lh)node.lines.push({lead:"key",leadText:"Links",html:lh});}
+    home(node,e.date,e.time,e.off);
     /* Note last and on its own line, the way a hotel does it. */
     if(String(e.note||"").trim())node.lines.push(L("key","Note",e.note));
     return [node];
   }
-  if(e.type==="meeting"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,[e.time,e.endTime].filter(Boolean).join("–")].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
-  if(e.type==="tour"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Via",e.provider));if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="meeting"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.name||"Meeting",titleSmall:[e.location,atTime([e.time,e.endTime].filter(Boolean).join("–"),e.zone)].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.withWhom)node.lines.push(L("key","With",e.withWhom));home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
+  if(e.type==="tour"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.name||"Tour",titleSmall:[e.place,atTime(e.time,e.zone)].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.provider)node.lines.push(L("key","Via",e.provider));home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];}
   /* A Note item's body is its content, not an annotation on something else, so
      it stays unlabelled — a "Note" label under a heading that already says Note
      would just be noise. */
-  if(e.type==="note"){const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.title||"Note",titleSmall:e.time||"",nodeFill:false,lines:[]};if(e.body)node.lines.push(L("none","",e.body));return [node];}
-  const node={id:id,when:toEpoch(e.date,e.time),stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,e.time].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};if(e.note)node.lines.push(L("key","Note",e.note));return [node];
+  if(e.type==="note"){const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.title||"Note",titleSmall:atTime(e.time,e.zone),nodeFill:false,lines:[]};if(e.body)node.lines.push(L("none","",e.body));return [node];}
+  const node={id:id,date:e.date,stime:e.time,off:e.off,stamp:fmtStamp(e.date),title:e.name||"Activity",titleSmall:[e.place,atTime(e.time,e.zone)].filter(Boolean).join(" · "),nodeFill:true,lines:[],link:e.link};home(node,e.date,e.time,e.off);if(e.note)node.lines.push(L("key","Note",e.note));return [node];
 }
-function journeyNodes(list){let nodes=[];list.forEach((e,i)=>{nodesFor(e,"n"+i).forEach((n,k)=>{n._ord=i*10+k;nodes.push(n);});});nodes.sort((a,b)=>{const wa=a.when??Infinity,wb=b.when??Infinity;return wa-wb||a._ord-b._ord;});const ff=firstFlight(list),lf=lastFlight(list);if(ff){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===ff&&n.meta.end==="dep");if(idx>0){const [x]=nodes.splice(idx,1);nodes.unshift(x);}}if(lf){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===lf&&n.meta.end==="arr");if(idx>-1&&idx<nodes.length-1){const [x]=nodes.splice(idx,1);nodes.push(x);}}const pal=palette();nodes.forEach((n,i)=>{n.color=pal[i%pal.length];});return nodes;}
-function confList(list){const rows=[];list.slice().map((e,i)=>({e,w:primaryWhen(e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{if(!e.conf)return;let sub="",cap="";if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");cap=[e.originCode,e.destCode].filter(Boolean).join(" → ");}else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");cap=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ")+(nt?" · "+nt+" nights":"");}else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");cap=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="entertainment"){sub="Show · "+(e.name||"");cap=[fmtStamp(e.date),e.venue].filter(Boolean).join(" · ");}else if(e.type==="meal"){sub="Dining · "+(e.name||"");cap=[fmtStamp(e.date),e.time].filter(Boolean).join(" · ");}else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.line?" · "+e.line:"");cap=[e.from,e.to].filter(Boolean).join(" → ");}else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");cap=[fmtStamp(e.date),e.location].filter(Boolean).join(" · ");}else if(e.type==="tour"){sub="Tour · "+(e.name||"");cap=[fmtStamp(e.date),e.provider].filter(Boolean).join(" · ");}else{sub="Activity · "+(e.name||"");cap=[fmtStamp(e.date),e.place].filter(Boolean).join(" · ");}rows.push({sub,val:e.conf,cap});});return rows;}
+/* A range check, not just a number check. "1e999" is Infinity and "1e308" is
+   finite but overflows Date once multiplied out to milliseconds — both reached
+   icsUTC and emitted "DTSTART:NaNNaNNaNTNaNNaN00Z", which some parsers treat
+   as grounds to reject the whole calendar. No real zone is past ±14:00; the
+   picker only offers −12:00…+14:00, so anything beyond ±18:00 is not an
+   offset a person chose and is dropped rather than trusted. */
+const OFF_MAX=1080;
+function offKnown(o){const n=+o;return !(o===""||o==null||!isFinite(n)||Math.abs(n)>OFF_MAX);}
+/* Every consumer of "when did this happen" has to agree, or one sheet
+   contradicts itself. It did: the spine ordered on the real instant while the
+   confirmations rail, the masthead route line and the elapsed stats still
+   ordered on the wall clock, so a trip crossing a zone came out in two
+   different orders on the same page — and the first-flight pin, also on wall
+   clock, hauled a later flight to the top and overrode the sort it was meant
+   to complement.
+
+   This is the single answer, and everything asks it. One point per timed end
+   (a flight has two), each resolved to a real instant. A point with no offset
+   of its own borrows from whichever point that has one sits nearest it in time
+   — nearest, not merely the one before it. Taking the one before puts a hotel
+   booked for the night you land in the zone you took off from, half a world
+   from the bed. With no offsets anywhere every instant collapses back to the
+   wall clock, so a trip that never states one orders exactly as it always did. */
+function instPoints(e){
+  if(e.type==="flight")return [{end:"dep",date:e.departDate,time:e.departTime,off:e.departOff},
+                               {end:"arr",date:e.arriveDate,time:e.arriveTime,off:e.arriveOff}];
+  if(e.type==="hotel")return [{end:"at",date:e.checkIn,time:checkInAt(e),off:e.off}];
+  if(e.type==="car")return [{end:"at",date:e.pickupDate,time:e.pickupTime,off:e.off}];
+  return [{end:"at",date:e.date,time:e.time,off:e.off}];
+}
+function instants(list){
+  const pts=[];
+  list.forEach((e,i)=>instPoints(e).forEach((p,k)=>{p.e=e;p._ord=i*10+k;p._wall=epUTC(p.date,p.time,"");pts.push(p);}));
+  pts.sort((a,b)=>{const wa=a._wall??Infinity,wb=b._wall??Infinity;return wa-wb||a._ord-b._ord;});
+  const prev=[],next=[];
+  let seen=null;pts.forEach((p,i)=>{prev[i]=seen;if(offKnown(p.off))seen=p;});
+  seen=null;for(let i=pts.length-1;i>=0;i--){next[i]=seen;if(offKnown(pts[i].off))seen=pts[i];}
+  const gap=(x,p)=>(x&&x._wall!=null&&p._wall!=null)?Math.abs(p._wall-x._wall):Infinity;
+  const pick=x=>(x&&offKnown(x.off))?x.off:"";
+  const m=new Map();
+  pts.forEach((p,i)=>{
+    const off=offKnown(p.off)?p.off:(gap(prev[i],p)<=gap(next[i],p)?pick(prev[i]):pick(next[i]));
+    const r=m.get(p.e)||{};r[p.end]={t:epUTC(p.date,p.time,off),off:off};m.set(p.e,r);
+  });
+  return m;
+}
+/* A flight's own moment is its departure; every other type has just the one.
+   instOff answers "which offset did this end up resolved against", which is what
+   lets the calendar pin exactly what the page pins. An empty answer means no
+   offset was resolvable anywhere in the trip — and that must stay floating in
+   the .ics, because treating an unstated wall clock as UTC would shift a purely
+   domestic trip by the whole of the reader's own offset. */
+function instRec(m,e,end){const r=m.get(e);return (r&&r[end])||null;}
+function instAt(m,e){const r=instRec(m,e,e.type==="flight"?"dep":"at");return r?r.t:null;}
+function instEnd(m,e,end){const r=instRec(m,e,end);return r?r.t:null;}
+function instOff(m,e,end){const r=instRec(m,e,end||"at");return r?r.off:"";}
+function journeyNodes(list){
+  const M=instants(list);
+  let nodes=[];
+  list.forEach((e,i)=>{nodesFor(e,"n"+i).forEach((n,k)=>{
+    n._ord=i*10+k;
+    n._inst=instEnd(M,e,e.type==="flight"?(k===0?"dep":"arr"):"at");
+    nodes.push(n);
+  });});
+  nodes.sort((a,b)=>{const ia=a._inst??Infinity,ib=b._inst??Infinity;return ia-ib||a._ord-b._ord;});
+  const ff=firstFlight(list),lf=lastFlight(list);
+  if(ff){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===ff&&n.meta.end==="dep");if(idx>0){const [x]=nodes.splice(idx,1);nodes.unshift(x);}}
+  if(lf){const idx=nodes.findIndex(n=>n.meta&&n.meta.ff===lf&&n.meta.end==="arr");if(idx>-1&&idx<nodes.length-1){const [x]=nodes.splice(idx,1);nodes.push(x);}}
+  const pal=palette();nodes.forEach((n,i)=>{n.color=pal[i%pal.length];});
+  return nodes;
+}
+/* Every caption is built from the same three parts in the same order — when,
+   what time, what it is — because this column used to show a date for a dinner,
+   a date range for a hotel and no date at all for a flight, which read as three
+   different lists stacked on top of each other. */
+function confList(list){
+  const rows=[];
+  const M=instants(list);
+  list.slice().map((e,i)=>({e,w:instAt(M,e)??Infinity,i})).sort((a,b)=>a.w-b.w||a.i-b.i).forEach(({e})=>{
+    if(!e.conf)return;
+    let sub="",when=fmtStamp(e.date),tm=atTime(e.time,e.zone),what="";
+    if(e.type==="flight"){sub="Air"+(e.carrier?" · "+e.carrier:"");when=fmtStamp(e.departDate);tm=atTime(e.departTime,e.departZone);what=[e.originCode,e.destCode].filter(Boolean).join(" → ");}
+    else if(e.type==="hotel"){const nt=nightsBetween(e.checkIn,e.checkOut);sub="Hotel · "+(e.name||"");when=[fmtStamp(e.checkIn),fmtStamp(e.checkOut)].filter(Boolean).join(" – ");tm=atTime(checkInShown(e),"");what=nt?nt+(nt===1?" night":" nights"):"";}
+    else if(e.type==="car"){sub="Car"+(e.company?" · "+e.company:"");when=fmtStamp(e.pickupDate);tm=atTime(e.pickupTime,e.zone);what=[e.pickupPlace,e.dropoffPlace].filter(Boolean).join(" → ");}
+    else if(e.type==="ground"){sub=(own(MODE,e.mode)?MODE[e.mode]:"Transfer")+(e.provider?" · "+e.provider:"");what=[e.from,e.to].filter(Boolean).join(" → ");}
+    else if(e.type==="entertainment"){sub="Show · "+(e.name||"");what=e.venue||"";}
+    else if(e.type==="meal"){sub="Dining · "+(e.name||"");what=e.venue||"";}
+    else if(e.type==="transport"){sub=(e.mode||"Transport")+(e.line?" · "+e.line:"");what=[e.from,e.to].filter(Boolean).join(" → ");}
+    else if(e.type==="meeting"){sub="Meeting · "+(e.name||"");what=e.location||"";}
+    else if(e.type==="tour"){sub="Tour · "+(e.name||"");what=e.provider||"";}
+    else{sub="Activity · "+(e.name||"");what=e.place||"";}
+    rows.push({sub,val:e.conf,cap:[when,tm,what].filter(Boolean).join(" · ")});
+  });
+  return rows;
+}
 
 /* ===== output ===== */
 function titleFont(len){if(len<=14)return 34;if(len<=20)return 29;if(len<=28)return 24;if(len<=38)return 20;if(len<=52)return 17;return 15;}
@@ -478,9 +597,30 @@ function renderLine(ln){let lead="";if(ln.lead==="badge"&&ln.leadText)lead='<spa
   const body=ln.html?ln.html:(ln.mono?'<span class="mono">'+inl(ln.text)+'</span>':inl(ln.text));
   return '<p'+(ln.alt?' class="alt"':'')+'>'+lead+body+'</p>';}
 function renderNode(n){const fill=n.nodeFill?" node-fill":"";const small=n.titleSmall?' <small>'+esc(n.titleSmall)+'</small>':"";const href=safeUrl(n.link);const tt=href?'<a href="'+esc(href)+'" style="color:inherit;text-decoration:none">'+esc(n.title)+'</a>':esc(n.title);const det=n.lines.length?'\n        <div class="detail">'+n.lines.map(renderLine).join("\n        ")+'</div>':"";return '<div class="leg'+fill+'" style="--seg:'+n.color+'">\n        <div class="leg-head"><span class="stamp">'+esc(n.stamp)+'</span><span class="title">'+tt+small+'</span></div>'+det+'\n      </div>';}
-function dayHead(n,when){let lbl="Unscheduled";if(when!=null){const dt=new Date(when);lbl=WD[dt.getDay()]+" "+dt.getDate()+" "+MONT[dt.getMonth()];}return '<div class="dayhead"><span class="dn">Day '+n+'</span><span class="dd">'+esc(lbl)+'</span></div>';}
-function dayKey(when){if(when==null)return "u";const dt=new Date(when);return dt.getFullYear()+"-"+dt.getMonth()+"-"+dt.getDate();}
-function renderSpine(nodes,grouped){if(!grouped)return nodes.map(renderNode).join("\n\n      ");let out=[],last=null,dn=0;nodes.forEach(n=>{const k=dayKey(n.when);if(k!==last){last=k;dn++;out.push(dayHead(dn,n.when));}out.push(renderNode(n));});return out.join("\n\n      ");}
+/* Grouped off the item's own date string rather than off its sort key: the key
+   is an instant now, and bucketing instants by day would file a 07:00 flight
+   out of Hong Kong under the previous day. A day heading means the local day. */
+function dayHead(n,iso){const [,m,d]=parseISO(iso||""),w=dow(iso);
+  const lbl=(w==null||!MONT[m-1])?"Unscheduled":WD[w]+" "+d+" "+MONT[m-1];
+  return '<div class="dayhead"><span class="dn">Day '+n+'</span><span class="dd">'+esc(lbl)+'</span></div>';}
+function dayKey(iso){return iso||"u";}
+/* Ungrouped, the spine is one chronological run and the instant order is the
+   whole answer. Grouped, the day is the unit and the days have to run forwards
+   — which the instant order does not guarantee: fly Tokyo 3 Mar 08:00 into
+   Honolulu 2 Mar 20:00 and the later instant carries the earlier local date,
+   which printed "Day 2 · Mon 2" beneath "Day 1 · Tue 3" and handed one date two
+   different day numbers if the trip came back to it. So bucket by local date
+   with the days ascending, and keep true order inside each day. */
+function renderSpine(nodes,grouped){
+  if(!grouped)return nodes.map(renderNode).join("\n\n      ");
+  const byDay=nodes.map((n,i)=>[n,i]).sort((a,b)=>{
+    const da=a[0].date||"\uffff",db=b[0].date||"\uffff";      /* undated last, as before */
+    return da<db?-1:da>db?1:a[1]-b[1];
+  }).map(x=>x[0]);
+  let out=[],last=null,dn=0;
+  byDay.forEach(n=>{const k=dayKey(n.date);if(k!==last){last=k;dn++;out.push(dayHead(dn,n.date));}out.push(renderNode(n));});
+  return out.join("\n\n      ");
+}
 
 function mastTitles(s){const titles=(s.titles||[]).map(t=>String(t||"").trim()).filter(Boolean);return {fs:titleFont(titles.join("").length),html:titles.map(esc).join('<span class="sep">/</span>'),plain:titles.join(" / ")};}
 function statStrip(stats){return stats.length?'<div class="stats">'+stats.map(x=>'<div class="stat"><b>'+esc(x.v)+'</b><span>'+esc(x.l)+'</span></div>').join("")+'</div>':"";}
@@ -746,10 +886,18 @@ function buildDocFor(idx){const ppl=people();const list=ppl.length>1?listFor(idx
 
 /* ===== calendar export =====
    One .ics for the whole trip, generated here — no server, same as the PDF.
-   Flights carry real UTC offsets, so those events are emitted in UTC and stay
-   correct wherever the calendar is read. Everything else has a bare local time,
-   matching the document's "all times local" footer, so it is emitted floating:
-   no zone, interpreted wherever the reader happens to be. */
+   Anything whose offset RESOLVED — its own, or inherited from the nearest row
+   that has one, exactly as the printed page resolves it — is emitted in UTC and
+   stays correct wherever the calendar is read. A row is emitted floating only
+   when no offset was resolvable anywhere in the trip: no zone, interpreted
+   wherever the reader happens to be. That case must keep floating, because
+   treating an unstated wall clock as UTC would shift a purely domestic trip by
+   the whole of the reader's own offset.
+
+   Mixing the two used to be automatic, because only flights could hold an
+   offset: a calendar set to Chicago would show a 22 Aug Macau airport transfer
+   nine hours AFTER the Hong Kong flight it was feeding, since one was pinned to
+   an instant and the other was not. */
 /* Every line break has to go, not just CRLF and LF: a lone CR reaches this from
    a share link or hand-edited JSON — a textarea can never produce one — and
    parsers that treat CR as a terminator would read whatever follows it as
@@ -789,7 +937,7 @@ function icsUTC(ms){
     p(d.getUTCHours())+p(d.getUTCMinutes())+"00Z";
 }
 /* Start, end and whether it is an all-day span, per item type. */
-function icsWhen(e){
+function icsWhen(e,roff){
   if(e.type==="flight"){
     const a=epUTC(e.departDate,e.departTime,e.departOff),b=epUTC(e.arriveDate,e.arriveTime,e.arriveOff);
     if(a!=null&&b!=null&&b>a&&e.departOff!==""&&e.arriveOff!=="")
@@ -814,19 +962,28 @@ function icsWhen(e){
        is inside the span and the exclusive end is the one after it. */
     if(e.dropoffDate)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.pickupDate),
       end:"DTEND;VALUE=DATE:"+icsDateAdd(e.dropoffDate>e.pickupDate?e.dropoffDate:e.pickupDate,1)};
+    {const ms=offKnown(roff)?epUTC(e.pickupDate,e.pickupTime,roff):null;
+     if(ms!=null)return {start:"DTSTART:"+icsUTC(ms),end:"DURATION:PT1H"};}
     return {start:"DTSTART:"+icsLocal(e.pickupDate,e.pickupTime),end:"DURATION:PT1H"};
   }
   if(!e.date)return null;
   if(!e.time)return {start:"DTSTART;VALUE=DATE:"+icsDate(e.date),
     end:"DTEND;VALUE=DATE:"+icsDateAdd(e.date,1)};
+  /* Pinned to a real instant when the row states its offset, floating when it
+     does not — the same rule a flight has always followed. */
+  const ms=offKnown(roff)?epUTC(e.date,e.time,roff):null;
   /* An end time at or before the start is a meeting that runs past midnight —
      a 20:00 dinner ending at 01:00 — so it ends on the next day. Equal times
      say nothing about the length and fall through to the hour below. */
-  if(e.type==="meeting"&&e.endTime&&e.endTime!==e.time)
-    return {start:"DTSTART:"+icsLocal(e.date,e.time),
-      end:"DTEND:"+icsLocal(e.date,e.endTime,e.endTime>e.time?0:1)};
+  if(e.type==="meeting"&&e.endTime&&e.endTime!==e.time){
+    const plus=e.endTime>e.time?0:1;
+    if(ms!=null)return {start:"DTSTART:"+icsUTC(ms),
+      end:"DTEND:"+icsUTC(epUTC(e.date,e.endTime,roff)+plus*86400000)};
+    return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DTEND:"+icsLocal(e.date,e.endTime,plus)};
+  }
   /* No end time recorded, so an hour — long enough to show up as a block, short
      enough not to swallow the afternoon. */
+  if(ms!=null)return {start:"DTSTART:"+icsUTC(ms),end:"DURATION:PT1H"};
   return {start:"DTSTART:"+icsLocal(e.date,e.time),end:"DURATION:PT1H"};
 }
 function icsWhere(e){
@@ -838,6 +995,13 @@ function icsDetail(e){
   if(e.note)bits.push(e.note);
   if(e.body)bits.push(e.body);
   if(e.conf)bits.push("Confirmation: "+e.conf);
+  /* An all-day span cannot carry a clock time, so the two that matter are
+     spelled out instead of being silently lost. */
+  if(e.type==="hotel"&&checkInShown(e))bits.push("Check-in: "+checkInShown(e));
+  if(e.type==="car"&&(e.dropoffDate||e.dropoffTime))
+    bits.push("Drop-off: "+[e.dropoffPlace,e.dropoffDate?fmtStamp(e.dropoffDate):"",atTime(e.dropoffTime,e.zone)].filter(Boolean).join(" · "));
+  if(e.provider)bits.push("Operator: "+e.provider);
+  if(e.withWhom)bits.push("With: "+e.withWhom);
   const via=connText(e);
   if(via)bits.push((e.type==="flight"?"Via: ":"Stops: ")+via);
   if(e.flightNos)bits.push("Flight: "+arrowize(e.flightNos));
@@ -852,16 +1016,33 @@ function buildICS(){
   const host=(location.hostname||"itinerary").replace(/[^\w.-]/g,"");
   const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Itinerary Builder//EN","CALSCALE:GREGORIAN",
     "X-WR-CALNAME:"+icsEsc(docTitle()||"Itinerary")];
-  ents().filter(hasContent).forEach((e,i)=>{
-    const when=icsWhen(e);
+  const list=ents().filter(hasContent);
+  /* The same resolution the printed page uses, so the two cannot disagree about
+     when something happens. */
+  const M=instants(list);
+  /* A UID used to be the item's position in this list, so inserting anything —
+     or merely filling in a card that had been empty and filtered out — renumbered
+     every later event. Re-importing then produced a second copy of the whole trip
+     instead of updating it. Derived from what the event *is* instead, with a
+     counter only where that genuinely collides. Editing an item's type, date or
+     title still mints a new UID; nothing short of a stored id can avoid that. */
+  const seen=new Map();
+  list.forEach(e=>{
+    const when=icsWhen(e,instOff(M,e,"at"));
     if(!when)return;
     const title=labelFor(e)||"Itinerary item";
+    const key=[e.type||"item",icsDate(dateOf(e))||"undated",slug(title)].join("-");
+    const n=(seen.get(key)||0)+1;seen.set(key,n);
     lines.push("BEGIN:VEVENT",
-      "UID:itin-"+i+"-"+slug(title)+"@"+host,
+      "UID:itin-"+key+(n>1?"-"+n:"")+"@"+host,
       "DTSTAMP:"+stamp,when.start,when.end,
       "SUMMARY:"+icsEsc(title));
     const where=icsWhere(e);
     if(where)lines.push("LOCATION:"+icsEsc(where));
+    /* A real URL property, not just a string in the body: calendars render it as
+       something you can click. The body still lists every link. */
+    const url=firstLink(e);
+    if(url)lines.push("URL:"+icsEsc(url));
     const detail=icsDetail(e);
     if(detail)lines.push("DESCRIPTION:"+icsEsc(detail));
     lines.push("END:VEVENT");
@@ -996,6 +1177,15 @@ function ibtn(act,i,sym,cls,dis){
   return '<button class="ic'+(cls?" "+cls:"")+'" data-act="'+act+'" data-i="'+i+'" aria-label="'+esc(name)+'"'+(dis?" disabled":"")+'>'+sym+'</button>';
 }
 function ownerOpts(){return [["shared","Both / all travelers"]].concat(people().map((p,idx)=>[String(idx),p.name||("Traveler "+(idx+1))]));}
+/* The same four controls on every timed item, so a ferry is entered the way a
+   flight leg is. The offset is what lets the row be placed against rows in
+   other zones, exported to a calendar as a real instant, and shown in home
+   time; the label is only what prints beside the clock. Flights keep their own
+   pair per leg, since a departure and an arrival are rarely in one zone. */
+function whenRow(p,e){
+  return '<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+
+    '<div class="grid">'+fld("UTC offset",sel(p+".off",e.off,offsetOpts()))+fld("Timezone",inp(p+".zone",e.zone,"MDT"))+'</div>';
+}
 
 function tail(e,i,noLink){const p="entities."+i;let h='<div class="grid three">'+fld("Confirmation",inp(p+".conf",e.conf,"Code",true))+fld("Cost",inp(p+".cost",e.cost,"0.00"))+fld("Currency",sel(p+".currency",e.currency||"USD",CURRENCIES))+'</div>';if(!noLink)h+=fld("Link (map / booking)",inp(p+".link",e.link,"https://…"),true);h+=fld("Note",area(p+".note",e.note,"Optional detail. **bold** supported."),true);return h;}
 /* Shared by flights and transport, which mean different things by it: a flight
@@ -1040,7 +1230,12 @@ function linkRows(e,i){
 }
 function entityCard(e,i){
   const p="entities."+i,tm=own(TYPES,e.type)?TYPES[e.type]:{label:e.type,c:"#666"};
-  let h='<div class="card" style="border-left-color:'+tm.c+'"><div class="card-h"><span class="tag" style="background:'+tm.c+'">'+esc(tm.label)+'</span><span class="sp"></span>'+ibtn("ent-del",i,"✕","del")+'</div>';
+  /* The same label and stamp the document itself uses, so the card in the form
+     and the leg on the page announce themselves identically. Suppressed while
+     the card is still blank, where labelFor() would only invent "Air". */
+  const sum=hasContent(e)?[labelFor(e),fmtStamp(dateOf(e))].filter(Boolean).join(" · "):"";
+  let h='<div class="card" style="border-left-color:'+tm.c+'"><div class="card-h"><span class="tag" style="background:'+tm.c+'">'+esc(tm.label)+'</span>'+
+    (sum?'<span class="card-sum">'+esc(sum)+'</span>':'<span class="sp"></span>')+ibtn("ent-del",i,"✕","del")+'</div>';
   if(multi())h+=fld("Traveler",sel(p+".owner",e.owner||"shared",ownerOpts()),true);
   if(e.type==="flight"){
     h+='<div class="sub-h">Departure</div><div class="grid three">'+fld("From code",inp(p+".originCode",e.originCode,"DEN"))+fld("From city",inp(p+".originName",e.originName,"Denver"))+fld("Timezone",inp(p+".departZone",e.departZone,"MDT"))+'</div>';
@@ -1057,25 +1252,36 @@ function entityCard(e,i){
     h+='<div class="hint">Flight numbers: comma-separated, displayed with arrows. Set both UTC offsets for an exact elapsed time; the timezone is the label shown on the page, like MDT.</div>';
     h+=tail(e,i);
   } else if(e.type==="hotel"){
-    h+=fld("Name",inp(p+".name",e.name,"Hotel name"),true)+'<div class="grid">'+fld("Check-in",dateF(p+".checkIn",e.checkIn))+fld("Check-out",dateF(p+".checkOut",e.checkOut))+'</div>'+fld("Area",inp(p+".area",e.area,"District"),true)+fld("Address / detail",area(p+".address",e.address,"Street, district…"),true)+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Hotel name"),true)+'<div class="grid three">'+fld("Check-in",dateF(p+".checkIn",e.checkIn))+fld("Check-in time",timeF(p+".checkInTime",e.checkInTime))+fld("Check-out",dateF(p+".checkOut",e.checkOut))+'</div>';
+    /* Directly under the field it explains. Every other hint on this card sits
+       with its own controls, and a note about check-in read as a footnote to
+       the cost when it trailed the whole card. */
+    h+='<div class="hint">Check-in time decides where the hotel sits in the journey, and prints beside the name. Left blank it is assumed to be '+HOTEL_CHECKIN+', which will sit above a flight that lands later that afternoon.</div>';
+    h+=fld("Area",inp(p+".area",e.area,"District"),true)+fld("Address / detail",area(p+".address",e.address,"Street, district…"),true)+tail(e,i);
   } else if(e.type==="car"){
-    h+=fld("Company",inp(p+".company",e.company,"Hertz"),true)+'<div class="sub-h">Pick-up</div><div class="grid">'+fld("Place",inp(p+".pickupPlace",e.pickupPlace,"Airport"))+fld("Date",dateF(p+".pickupDate",e.pickupDate))+'</div><div class="grid">'+fld("Time",timeF(p+".pickupTime",e.pickupTime))+'<div></div></div><div class="sub-h">Drop-off</div><div class="grid">'+fld("Place",inp(p+".dropoffPlace",e.dropoffPlace,"Same"))+fld("Date",dateF(p+".dropoffDate",e.dropoffDate))+'</div><div class="grid">'+fld("Time",timeF(p+".dropoffTime",e.dropoffTime))+'<div></div></div>'+tail(e,i);
+    /* One offset for the rental, not one per end: the card sorts on its pick-up
+       and the drop-off is a detail line under it, so a second offset would add
+       a control that changes nothing anybody can see. */
+    h+=fld("Company",inp(p+".company",e.company,"Hertz"),true)+
+      '<div class="sub-h">Pick-up</div><div class="grid three">'+fld("Place",inp(p+".pickupPlace",e.pickupPlace,"Airport"))+fld("Date",dateF(p+".pickupDate",e.pickupDate))+fld("Time",timeF(p+".pickupTime",e.pickupTime))+'</div>'+
+      '<div class="sub-h">Drop-off</div><div class="grid three">'+fld("Place",inp(p+".dropoffPlace",e.dropoffPlace,"Same"))+fld("Date",dateF(p+".dropoffDate",e.dropoffDate))+fld("Time",timeF(p+".dropoffTime",e.dropoffTime))+'</div>'+
+      '<div class="grid">'+fld("UTC offset",sel(p+".off",e.off,offsetOpts()))+fld("Timezone",inp(p+".zone",e.zone,"MDT"))+'</div>'+tail(e,i);
   } else if(e.type==="ground"){
-    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["taxi","Taxi"],["rideshare","Rideshare"],["private","Private car"]]))+fld("Operator (opt.)",inp(p+".provider",e.provider,"Uber / Grab"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Airport"))+fld("To",inp(p+".to",e.to,"Hotel"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["taxi","Taxi"],["rideshare","Rideshare"],["private","Private car"]]))+fld("Operator (opt.)",inp(p+".provider",e.provider,"Uber / Grab"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Airport"))+fld("To",inp(p+".to",e.to,"Hotel"))+'</div>'+whenRow(p,e)+tail(e,i);
   } else if(e.type==="entertainment"){
-    h+=fld("Name",inp(p+".name",e.name,"Show / event"),true)+fld("Venue",inp(p+".venue",e.venue,"Venue"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Show / event"),true)+fld("Venue",inp(p+".venue",e.venue,"Venue"),true)+whenRow(p,e)+tail(e,i);
   } else if(e.type==="meal"){
-    h+=fld("Name",inp(p+".name",e.name,"Restaurant"),true)+fld("Venue / area",inp(p+".venue",e.venue,"District"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Restaurant"),true)+fld("Venue / area",inp(p+".venue",e.venue,"District"),true)+whenRow(p,e)+tail(e,i);
   } else if(e.type==="transport"){
-    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Line / service",inp(p+".line",e.line,"IC 522 / Line 2",true))+'</div><div class="grid">'+fld("Direction",inp(p+".direction",e.direction,"towards Cais do Sodré"))+'<div></div></div><div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+connRows(e,i)+linkRows(e,i)+tail(e,i,true);
+    h+='<div class="grid">'+fld("Mode",sel(p+".mode",e.mode,[["Train","Train"],["Ferry","Ferry"],["Bus","Bus"],["Coach","Coach"],["Shuttle","Shuttle"],["Other","Other"]]))+fld("Line / service",inp(p+".line",e.line,"IC 522 / Line 2",true))+'</div><div class="grid half">'+fld("Direction",inp(p+".direction",e.direction,"towards Cais do Sodré"))+'</div><div class="grid">'+fld("From",inp(p+".from",e.from,"Origin"))+fld("To",inp(p+".to",e.to,"Destination"))+'</div>'+whenRow(p,e)+connRows(e,i)+linkRows(e,i)+tail(e,i,true);
   } else if(e.type==="meeting"){
-    h+=fld("Subject",inp(p+".name",e.name,"Meeting / task"),true)+fld("Location",inp(p+".location",e.location,"Office / video call"),true)+'<div class="grid three">'+fld("Date",dateF(p+".date",e.date))+fld("Start",timeF(p+".time",e.time))+fld("End",timeF(p+".endTime",e.endTime))+'</div>'+fld("With",inp(p+".withWhom",e.withWhom,"People / team"),true)+tail(e,i);
+    h+=fld("Subject",inp(p+".name",e.name,"Meeting / task"),true)+fld("Location",inp(p+".location",e.location,"Office / video call"),true)+'<div class="grid three">'+fld("Date",dateF(p+".date",e.date))+fld("Start",timeF(p+".time",e.time))+fld("End",timeF(p+".endTime",e.endTime))+'</div><div class="grid">'+fld("UTC offset",sel(p+".off",e.off,offsetOpts()))+fld("Timezone",inp(p+".zone",e.zone,"MDT"))+'</div>'+fld("With",inp(p+".withWhom",e.withWhom,"People / team"),true)+tail(e,i);
   } else if(e.type==="tour"){
-    h+=fld("Name",inp(p+".name",e.name,"Tour / excursion"),true)+fld("Meeting point",inp(p+".place",e.place,"Where to meet"),true)+'<div class="grid">'+fld("Operator (opt.)",inp(p+".provider",e.provider,"Quinta Tours"))+'<div></div></div><div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Tour / excursion"),true)+fld("Meeting point",inp(p+".place",e.place,"Where to meet"),true)+'<div class="grid half">'+fld("Operator (opt.)",inp(p+".provider",e.provider,"Quinta Tours"))+'</div>'+whenRow(p,e)+tail(e,i);
   } else if(e.type==="note"){
-    h+=fld("Title",inp(p+".title",e.title,"Reminder"),true)+fld("Body",area(p+".body",e.body,"Detail…"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>';
+    h+=fld("Title",inp(p+".title",e.title,"Reminder"),true)+fld("Body",area(p+".body",e.body,"Detail…"),true)+whenRow(p,e);
   } else {
-    h+=fld("Name",inp(p+".name",e.name,"Activity / transfer"),true)+fld("Place",inp(p+".place",e.place,"Location"),true)+'<div class="grid">'+fld("Date",dateF(p+".date",e.date))+fld("Time",timeF(p+".time",e.time))+'</div>'+tail(e,i);
+    h+=fld("Name",inp(p+".name",e.name,"Activity / transfer"),true)+fld("Place",inp(p+".place",e.place,"Location"),true)+whenRow(p,e)+tail(e,i);
   }
   return h+'</div>';
 }
@@ -1100,7 +1306,7 @@ function renderForm(){
   h+=fld("Eyebrow",inp("eyebrow",s.eyebrow,"Travel Itinerary"),true);
   h+='<div class="sub-h">Travelers</div>';
   people().forEach((p,i)=>{h+='<div class="card">'+'<div class="tt">'+inp("people."+i+".name",p.name,"Traveler name",false,"Traveler "+(i+1)+" name")+(people().length>1?ibtn("person-del",i,"✕","del"):"")+'</div>'+fld("Home timezone",selGroups("people."+i+".homeTz",p.homeTz||"",tzOptions()),true)+
-      '<div class="grid">'+fld("Their currency",sel("people."+i+".currency",personCur(p),CURRENCIES))+'<div></div></div>'+'</div>';});
+      '<div class="grid half">'+fld("Their currency",sel("people."+i+".currency",personCur(p),CURRENCIES))+'</div>'+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="person-add">+ Add traveler</button></div>';
   h+='<div class="hint">Zones that shift for daylight saving list both offsets, January first. The itinerary works out which one applies on each date.</div>';
   if(people().length>1)h+='<div class="hint">Each traveler gets its own page. Assign flights (and anything else that differs) to a traveler; leave shared items on “Both / all.”</div>';
@@ -1108,9 +1314,20 @@ function renderForm(){
   (s.titles||[]).forEach((t,i)=>{h+='<div class="tt">'+inp("titles."+i,t,"City",false,"Destination title "+(i+1))+ibtn("title-up",i,"↑",null,i===0)+ibtn("title-down",i,"↓",null,i===s.titles.length-1)+ibtn("title-del",i,"✕","del",s.titles.length<=1)+'</div>';});
   h+='<div class="addrow"><button class="add" data-act="title-add">+ Title</button></div>';
   h+='<div class="grid" style="margin-top:11px">'+fld("Trip start",dateF("tripStart",s.tripStart))+fld("Trip end",dateF("tripEnd",s.tripEnd))+'</div>';
-  h+='<div class="hint">Nights, route line, stats and the date range are calculated automatically.</div></div></div>';
+  h+='<div class="hint">Nights, the route line and the stats are worked out from the items you add. The date range above is not — it prints exactly as set here.</div></div></div>';
 
-  h+='<div class="sec"><h2>Auto summary</h2><div class="sbody"><div class="derived">'+summaryHTML()+'</div></div></div>';
+  h+='<div class="sec"><h2>Document & display</h2><div class="sbody">';
+  h+=chk("showCosts",s.showCosts,"Show cost section");
+  h+=chk("dayGrouped",s.dayGrouped,"Group journey into day headers");
+  h+=chk("showSummaryPage",s.showSummaryPage,"Add an overview page (multi-traveler)");
+  h+='<div class="grid half" style="margin-top:9px">'+fld("Paper size",sel("paper",state.paper||"letter",
+    Object.keys(PAPERS).map(k=>[k,PAPERS[k].label])))+'</div>';
+  h+='<div class="hint">The preview, print and PDF all follow this — a page in the preview is one sheet of whichever you pick.</div>';
+  h+='<div class="sub-h">Money</div>';
+  h+='<div class="grid half">'+fld("Base currency",sel("baseCurrency",s.baseCurrency||"USD",CURRENCIES))+'</div>';
+  h+=chk("splitShared",s.splitShared,"Split shared costs across travelers");
+  h+='<div class="sub-h">Exchange rates</div><div id="ratesBox">'+ratesEditor()+'</div>';
+  h+='<div class="hint">Rates convert every currency into the base for a single trip total. Theme is in the top bar.</div></div></div>';
 
   h+='<div class="sec"><h2>Trip items <span class="ct">'+ents().length+'</span></h2><div class="sbody">';
   ents().forEach((e,i)=>{h+=entityCard(e,i);});
@@ -1118,7 +1335,9 @@ function renderForm(){
   h+='<div class="sub-h">Stay</div><div class="addrow"><button class="add" data-act="add-hotel">+ Hotel</button></div>';
   h+='<div class="sub-h">Things to do</div><div class="addrow"><button class="add" data-act="add-activity">+ Activity</button><button class="add" data-act="add-tour">+ Tour</button><button class="add" data-act="add-meal">+ Meal</button><button class="add" data-act="add-entertainment">+ Entertainment</button></div>';
   h+='<div class="sub-h">Work & notes</div><div class="addrow"><button class="add" data-act="add-meeting">+ Meeting / work</button><button class="add" data-act="add-note">+ Note</button></div>';
-  h+='<div class="hint">The journey orders itself by date and time, and always begins with the first flight and ends with the last flight. Colors are automatic.</div></div></div>';
+  h+='<div class="hint">The journey orders itself by date and time, and always begins with the first flight and ends with the last flight. Colors are automatic.<br><br>Set an item\u2019s UTC offset and it is placed against items in other zones by the real instant, exported to your calendar pinned to that instant, and given a home-time line; the timezone beside it is only the label printed on the page, like MDT. Leave both blank on a trip that never changes zone.</div></div></div>';
+
+  h+='<div class="sec"><h2>Auto summary</h2><div class="sbody"><div class="derived">'+summaryHTML()+'</div></div></div>';
 
   h+='<div class="sec"><h2>Reference <span class="ct">'+(s.emergency||[]).length+'</span></h2><div class="sbody">';
   (s.emergency||[]).forEach((x,i)=>{h+='<div class="card"><div class="card-h"><span class="tag" style="background:var(--muted)">Ref '+(i+1)+'</span><span class="sp"></span>'+ibtn("ref-up",i,"↑",null,i===0)+ibtn("ref-down",i,"↓",null,i===s.emergency.length-1)+ibtn("ref-del",i,"✕","del")+'</div><div class="grid">'+fld("Label",inp("emergency."+i+".label",x.label,"Hotel / consulate"))+fld("Value",inp("emergency."+i+".value",x.value,"Phone / policy"))+'</div></div>';});
@@ -1144,19 +1363,6 @@ function renderForm(){
   /* The wording has to hold on a phone too, where dragging simply does not
      work: HTML5 drag-and-drop never fires from touch input. */
   h+='<div class="hint">Reorder with ↑ ↓, or by dragging a card with a mouse. Each item belongs to the nearest section heading above it; items above the first heading use the section heading at the top.</div></div></div>';
-
-  h+='<div class="sec"><h2>Document & display</h2><div class="sbody">';
-  h+=chk("showCosts",s.showCosts,"Show cost section");
-  h+=chk("dayGrouped",s.dayGrouped,"Group journey into day headers");
-  h+=chk("showSummaryPage",s.showSummaryPage,"Add an overview page (multi-traveler)");
-  h+='<div class="grid" style="margin-top:9px">'+fld("Paper size",sel("paper",state.paper||"letter",
-    Object.keys(PAPERS).map(k=>[k,PAPERS[k].label])))+'<div></div></div>';
-  h+='<div class="hint">The preview, print and PDF all follow this — a page in the preview is one sheet of whichever you pick.</div>';
-  h+='<div class="sub-h">Money</div>';
-  h+='<div class="grid">'+fld("Base currency",sel("baseCurrency",s.baseCurrency||"USD",CURRENCIES))+'<div></div></div>';
-  h+=chk("splitShared",s.splitShared,"Split shared costs across travelers");
-  h+='<div class="sub-h">Exchange rates</div><div id="ratesBox">'+ratesEditor()+'</div>';
-  h+='<div class="hint">Rates convert every currency into the base for a single trip total. Theme is in the top bar.</div></div></div>';
 
   h+='<div class="sec"><h2>Sharing & export</h2><div class="sbody">';
   h+='<div class="hint">Use “Copy link” in the toolbar for a self-contained link with the whole trip embedded in the URL.</div>';
@@ -1207,9 +1413,10 @@ form.addEventListener("change",e=>{
 });
 
 /* ===== airport / airline prefill =====
-   Vendored OpenFlights tables (data/, rebuilt by scripts/build-openflights.mjs),
-   fetched once on first use — they are only needed while editing a flight, and
-   the airport table is the larger part of the page's payload. A failed fetch,
+   Vendored lookup tables (data/, rebuilt by scripts/build-data.mjs) — airports
+   from OurAirports, airline names from OpenFlights — fetched once on first use,
+   since they are only needed while editing a flight and the airport table is
+   the larger part of the page's payload. A failed fetch,
    including opening index.html straight off disk, just leaves prefill inert. */
 let REFP=null;
 const AUTOFILLED=new WeakMap();

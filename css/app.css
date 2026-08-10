@@ -26,6 +26,11 @@ body{font-family:var(--sans);color:var(--ink);background:var(--panel2);font-size
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .grid.three{grid-template-columns:1fr 1fr 1fr}
 .grid.one{grid-template-columns:1fr}
+/* A field that should occupy one column of two and leave the other empty. Says
+   what it means, where the six copies of `<div class="grid">…<div></div></div>`
+   it replaces said it by padding with an empty box. */
+.grid.half{grid-template-columns:1fr 1fr}
+.grid.half>.field:only-child{grid-column:1}
 .grid.rate{grid-template-columns:auto 1fr auto;align-items:center;gap:8px}
 .field{display:flex;flex-direction:column;gap:3px;min-width:0}
 .field.wide{grid-column:1/-1}
@@ -42,6 +47,11 @@ input[type=date].f,input[type=time].f{font-family:var(--mono);font-size:11.5px}
 .card-h{display:flex;align-items:center;gap:8px;margin-bottom:9px}
 .tag{font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px}
 .card-h .sp{flex:1}
+/* What the card actually contains, next to its type tag — 24 cards that each
+   said only "FLIGHT" meant reading the first field of every one to find
+   anything. Truncates rather than wraps: the header must stay one line high. */
+.card-sum{font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
 .ic{border:1px solid var(--line);background:#fff;color:var(--muted);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:12px;line-height:1;display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono)}
 .ic:hover{background:var(--panel2);color:var(--ink)}
 .ic.del:hover{background:#fbecec;color:var(--red);border-color:#e6c3c3}
