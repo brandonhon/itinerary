@@ -5,9 +5,9 @@ document. The site is plain HTML, CSS, and JavaScript — nothing to build, no
 server, nothing to install. Open `index.html` in a browser, or host the folder
 on any static host such as GitHub Pages.
 
-The one exception is the airport lookup tables in `data/`, which are generated
-and committed. Regenerating them needs Node and a single package; using or
-hosting the site does not.
+The one exception is the lookup tables in `data/` — airports, airlines and
+reference exchange rates — which are generated and committed. Regenerating them
+needs Node and a single package; using or hosting the site does not.
 
 Fill in the form on the left; the right side is a live preview of the actual
 printed pages. Every page in that preview is a real sheet of paper — US Letter
@@ -50,11 +50,16 @@ Flights, hotels, rental cars, ground transfers (taxi / rideshare / private car),
 transport (train, ferry, bus, coach, shuttle), activities, tours, meals,
 entertainment, meetings, and freeform notes.
 
-The journey orders itself by date and time — you never sort anything by hand.
-It always opens with the first flight and closes with the last. Whatever the
+The journey orders itself by date and time — you never sort anything by hand,
+and where UTC offsets are set it orders by the real instant rather than by the
+wall clock (see [Dates and times](#dates-and-times)). It always opens with the
+first flight and closes with the last. Whatever the
 item, its note prints last, on its own labelled row, so the details above it
 stay scannable. Timeline colours
 are assigned automatically from the active theme.
+
+Each card in the builder is headed with what it holds — `FLIGHT · United
+DEN–LIS · Fri 18` — so a long trip stays scannable without opening every one.
 
 An item you have added but not filled in yet stays out of the document until it
 says something. A date or a time on its own doesn't count, so a half-started
@@ -86,8 +91,10 @@ Add travelers under **Header**. Each one gets their own pages, and every trip
 item is assigned either to a specific traveler or to "Both / all". Turn on the
 overview page for a shared-plan cover sheet that summarises everyone's routes.
 
-Give each traveler a home timezone and flight times pick up a second line
-showing the equivalent time back home.
+Give each traveler a home timezone and any item whose UTC offset is known picks
+up a second line showing the equivalent time back home — not just flights. It is
+left off where the two clocks agree, so a traveler already in the zone sees no
+clutter.
 
 ### Dates and times
 
@@ -95,6 +102,29 @@ Empty date fields open the calendar on your trip's month rather than on today,
 and empty time fields start at 00:00 rather than at whatever the clock happens
 to say — browsers differ on both, so the app sets them itself. Tabbing past an
 empty field still leaves it empty; nothing is filled in behind your back.
+
+Every timed item can state a **UTC offset** and a **timezone label**, the same
+pair a flight leg has always had. The offset is what places the item against
+items in other zones, pins it in the calendar export, and works out the
+home-time line; the label is only what prints beside the clock — `05:35 HKT`.
+Leave both blank on a trip that never changes zone and nothing changes.
+
+Set them and the journey orders itself by the **real instant** rather than by
+the wall clock, which matters the moment a trip crosses a zone: a 09:30 shuttle
+in Macau really does happen before a 13:00 flight from Hong Kong, and a taxi
+from the airport really does come after the flight that lands at 05:05. An item
+that states no offset borrows from whichever item that does sits nearest it in
+time, so a trip where only the flights are filled in still orders sensibly.
+
+Turn on **Group journey into day headers** and the days are the unit instead:
+items are bucketed by their own local date with the days running forwards, and
+true chronological order is kept inside each day. Without that, an itinerary
+crossing the date line — leave Tokyo on the 3rd, land in Honolulu on the 2nd —
+would print its day headings backwards.
+
+A hotel takes a **check-in time**. It decides where the hotel sits in the
+journey and prints beside the name; left blank it is assumed to be mid-afternoon
+(15:00), which will sit above a flight that lands later that afternoon.
 
 ### Money
 
@@ -166,13 +196,30 @@ PDF" as the destination — that path is vector.
 **Calendar** downloads the whole trip as an `.ics` file — import it into Google
 Calendar, Apple Calendar, Outlook or anything else that reads the format.
 
-Flights carry real UTC offsets, so those events are written in UTC and stay
-correct wherever they are read. Everything else has a local time with no zone,
-matching the document's "all times local" footer, so those are written as
-floating times and show at the same clock time whatever zone you are in. Hotels
-and rental cars become all-day spans; anything with a time but no end gets an
-hour. Confirmation numbers, stops, flight numbers and links go into each event's
-description.
+Anything whose UTC offset is known is written as a real instant, so it stays
+correct wherever the calendar is read. That includes items that never stated an
+offset themselves but sit between two that did — the export uses the same
+resolution the printed page uses, so the two can't disagree about when something
+happens.
+
+An item on a trip that states no offset anywhere is written as a *floating*
+time: no zone, shown at the same clock time whatever zone you are in. That is
+the right answer for a trip that never leaves one zone, and it is why offsets
+are worth filling in on one that does.
+
+Hotels and rental cars become all-day spans; anything with a time but no end
+gets an hour. Because an all-day event can't carry a clock time, a hotel's
+check-in time and a car's drop-off time are written into the description
+instead. Confirmation numbers, notes, stops, flight numbers, the operator, who a
+meeting is with, and links all go into the description too, and the first link
+is also attached as a real `URL:` property so calendars render it as something
+you can click.
+
+Event UIDs are derived from what the event is — type, date and title — not from
+its position in the trip. Re-exporting after adding or removing an item updates
+the events you already imported instead of giving you a second copy of the whole
+trip. Changing an item's type, date or title does mint a new UID, so that one
+item will arrive as a new event.
 
 The file covers the whole trip rather than one traveler, since a calendar is
 personal and unwanted events are easy to delete.
@@ -209,10 +256,16 @@ they are collapsed.
 
 ## Requirements and dependencies
 
-Runs from `file://` for everything except airport prefill, which reads the
-bundled JSON tables and so needs the folder served over HTTP (`python3 -m
-http.server` is enough). Everything else — editing, preview, print, PDF, share
-links — works straight off disk. Tested in current Chrome.
+Runs from `file://` for everything except the bundled JSON tables under `data/`,
+which are fetched over HTTP: airport prefill and the reference exchange rates.
+Both fail quietly off disk — prefill goes inert and the editor asks you to enter
+rates by hand. Everything else — editing, preview, print, PDF, share links —
+works straight off disk. Tested in current Chrome.
+
+To serve it locally, `make` (or `make serve`) starts a static server on
+http://localhost:8138/; `PORT=8199 make serve` moves it. It binds `127.0.0.1`
+deliberately, since a saved trip in the repo folder holds real travel details.
+`make help` lists the targets.
 
 Two things load from a CDN at runtime, both optional:
 
@@ -231,6 +284,7 @@ from all of this, `package.json` pins one package used only to regenerate
 ## Project layout
 
 ```
+Makefile        `make serve` — the local server used for testing
 index.html      markup shell + the print stylesheet held as inert text
 css/app.css     styles for the builder UI (form + preview chrome)
 js/app.js       state, form rendering, pagination, and print/PDF/share plumbing
